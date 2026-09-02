@@ -4,6 +4,9 @@ A Python prototype for Acme Corp's automated invoice processing workflow, based 
 
 The planned workflow covers invoice ingestion, structured data extraction, inventory validation, simulated approval, and mock payment processing.
 
+See [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) for additions beyond the assessment,
+their purpose, implementation status, and limits.
+
 ## Project status
 
 Inventory database setup and a minimal LangGraph verification example are implemented.
