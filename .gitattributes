@@ -1,0 +1,2 @@
+# Preserve PDF bytes across platforms; line-ending conversion can damage offsets.
+*.pdf binary
