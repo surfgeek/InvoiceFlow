@@ -63,7 +63,8 @@ or overwriting existing stock values. The generated database is excluded from Gi
 ## Document reading
 
 `read_document(path)` returns source text from TXT, CSV, JSON, XML, and text-based
-PDF documents. Text files use UTF-8, with an optional byte-order mark. PDF text is
+PDF documents. The bundled Markdown plugin also supports MD. Text files use UTF-8,
+with an optional byte-order mark. PDF text is
 read across all pages using pypdf. The function does not extract invoice fields,
 parse structured formats, or correct source values; all supported formats will
 pass through Grok for invoice-field extraction and normalization.
@@ -75,6 +76,14 @@ readable PDFs. The three supplied PDFs contain extractable text.
 
 The original assessment fixtures are included in `data/invoices`; see
 `data/README.md` for their source revision. Grok integration is not yet implemented.
+
+### Additional file formats
+
+Readers are discovered from `reader_plugins/*.py` at startup. Add a module
+exporting `EXTENSIONS` and `read(path) -> str`, install its dependencies, and restart
+to enable another format without changing or rebuilding the core application.
+See `reader_plugins/README.md` for the contract and bundled Markdown reader.
+DOCX and PNG are extension examples, not currently bundled capabilities.
 
 ## Data records
 
@@ -117,6 +126,8 @@ Model unit tests cover missing data, decimal precision, currency preservation,
 calendar dates, malformed records, and UTC timestamp handling.
 Document reader tests cover all 20 supplied files, source text preservation,
 multiple PDF pages, and unreadable or unsupported inputs.
+Plugin tests cover discovery, restart behavior, extension conflicts, invalid
+definitions, dependency failures, reader errors, and execution in a fresh process.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 
