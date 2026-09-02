@@ -58,6 +58,24 @@ It creates `inventory.db` beside the script with the assessment's seed records:
 Running the script again adds any missing seed records without duplicating rows
 or overwriting existing stock values. The generated database is excluded from Git.
 
+## Tests
+
+Run the automated tests from the repository root:
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+The tests use Python's built-in `unittest` runner and temporary SQLite databases;
+they do not modify your local `inventory.db`. They cover the required seed data,
+repeat setup, preservation of changed stock, restoration of missing seed records,
+and an invalid database path. A command-line test runs the script in a separate
+process and verifies that it creates the database beside the script even when
+launched from another working directory.
+
+These are database integration tests and a setup CLI test. End-to-end invoice
+processing tests will be added when that workflow is implemented.
+
 ## Change control
 
 Develop changes on feature branches and review them through pull requests before merging into `main`.
