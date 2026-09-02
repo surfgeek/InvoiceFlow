@@ -7,6 +7,7 @@ The planned workflow covers invoice ingestion, structured data extraction, inven
 ## Project status
 
 Inventory database setup and a minimal LangGraph verification example are implemented.
+Invoice and processing metadata models are defined in `models.py`.
 LangGraph is the selected orchestration framework. Invoice processing is not yet implemented.
 
 ## Python environment and LangGraph example
@@ -22,7 +23,7 @@ python -m venv .venv
 
 On macOS/Linux, use `.venv/bin/python` in place of `.venv\Scripts\python`.
 The `.venv` directory stays local and is excluded from Git. `requirements.txt`
-pins the direct LangGraph dependency; its transitive dependencies are resolved by pip.
+pins direct dependencies; their transitive dependencies are resolved by pip.
 Installation requires internet; the example runs locally without an API key or model call.
 
 Expected output:
@@ -58,12 +59,34 @@ It creates `inventory.db` beside the script with the assessment's seed records:
 Running the script again adds any missing seed records without duplicating rows
 or overwriting existing stock values. The generated database is excluded from Git.
 
+## Data records
+
+`Invoice` contains vendor, amount, currency, items, and due date. `InvoiceItem`
+contains an item name and quantity. Missing fields remain `None`; currency is not
+inferred. Amounts and quantities use finite `Decimal` values without rounding or
+currency conversion. Pass decimal strings or `Decimal` objects to avoid precision
+loss before validation. Negative and fractional values remain available for
+business validation rather than being silently corrected.
+
+Due dates are calendar dates with no timezone. Extraction must supply an ISO date
+or leave it unknown; ambiguous text and timestamps are not converted by the model.
+Pydantic reports malformed field values and unexpected fields as schema errors.
+Passing schema validation does not establish invoice correctness or approval.
+
+`ProcessingRecord` stores arrival time separately from invoice data. Its
+`ProcessingEvent` entries identify a stage, status, timestamp, and optional reason.
+Stages are ingestion, validation, approval, and payment; statuses are started,
+completed, and failed. The application must supply timezone-aware timestamps;
+the models normalize them to UTC while preserving the instant. No timestamps are
+generated automatically. Recording events and handling extraction errors will be
+implemented with the workflow.
+
 ## Tests
 
 Run the automated tests from the repository root:
 
 ```sh
-python -m unittest discover -s tests -v
+.venv\Scripts\python -m unittest discover -s tests -v
 ```
 
 The tests use Python's built-in `unittest` runner and temporary SQLite databases;
@@ -73,7 +96,9 @@ and an invalid database path. A command-line test runs the script in a separate
 process and verifies that it creates the database beside the script even when
 launched from another working directory.
 
-These are database integration tests and a setup CLI test. End-to-end invoice
+Model unit tests cover missing data, decimal precision, currency preservation,
+calendar dates, malformed records, and UTC timestamp handling.
+The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 
 ## Change control
