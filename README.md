@@ -1,12 +1,12 @@
 # InvoiceFlow
 
-A Python prototype for Acme Corp's automated invoice processing workflow, built step by step for the [Galatiq technical assessment](https://github.com/galatiq-ai/galatiq-case-invoices).
+A Python prototype for Acme Corp's automated invoice processing workflow, based on the [Galatiq invoice processing assessment](https://github.com/galatiq-ai/galatiq-case-invoices).
 
 The planned workflow covers invoice ingestion, structured data extraction, inventory validation, simulated approval, and mock payment processing.
 
 ## Project status
 
-Inventory database setup is implemented. The invoice processing workflow will be developed incrementally.
+Inventory database setup is implemented. Invoice processing is not yet implemented.
 
 ## Set up the inventory database
 
@@ -49,4 +49,4 @@ processing tests will be added when that workflow is implemented.
 
 ## Change control
 
-Discuss each change before implementation, develop it on a feature branch, and review it through a pull request before merging into `main`.
+Develop changes on feature branches and review them through pull requests before merging into `main`.
