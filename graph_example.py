@@ -1,4 +1,4 @@
-"""A one-node learning example, not the invoice processing workflow."""
+"""Verify local LangGraph execution with a single-node graph."""
 
 from typing import TypedDict
 
