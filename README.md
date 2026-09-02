@@ -8,6 +8,7 @@ The planned workflow covers invoice ingestion, structured data extraction, inven
 
 Inventory database setup and a minimal LangGraph verification example are implemented.
 Invoice and processing metadata models are defined in `models.py`.
+Document text reading is implemented in `document_reader.py`.
 LangGraph is the selected orchestration framework. Invoice processing is not yet implemented.
 
 ## Python environment and LangGraph example
@@ -59,6 +60,22 @@ It creates `inventory.db` beside the script with the assessment's seed records:
 Running the script again adds any missing seed records without duplicating rows
 or overwriting existing stock values. The generated database is excluded from Git.
 
+## Document reading
+
+`read_document(path)` returns source text from TXT, CSV, JSON, XML, and text-based
+PDF documents. Text files use UTF-8, with an optional byte-order mark. PDF text is
+read across all pages using pypdf. The function does not extract invoice fields,
+parse structured formats, or correct source values; all supported formats will
+pass through Grok for invoice-field extraction and normalization.
+
+Missing files, unsupported formats, decoding failures, corrupt or encrypted PDFs,
+and documents without readable text raise `DocumentReadError`. OCR is not
+implemented: text inside images is not read, including images within otherwise
+readable PDFs. The three supplied PDFs contain extractable text.
+
+The original assessment fixtures are included in `data/invoices`; see
+`data/README.md` for their source revision. Grok integration is not yet implemented.
+
 ## Data records
 
 `Invoice` contains vendor, amount, currency, items, and due date. `InvoiceItem`
@@ -98,6 +115,8 @@ launched from another working directory.
 
 Model unit tests cover missing data, decimal precision, currency preservation,
 calendar dates, malformed records, and UTC timestamp handling.
+Document reader tests cover all 20 supplied files, source text preservation,
+multiple PDF pages, and unreadable or unsupported inputs.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 
