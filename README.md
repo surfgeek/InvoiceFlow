@@ -6,7 +6,36 @@ The planned workflow covers invoice ingestion, structured data extraction, inven
 
 ## Project status
 
-Inventory database setup is implemented. Invoice processing is not yet implemented.
+Inventory database setup and a minimal LangGraph verification example are implemented.
+LangGraph is the selected orchestration framework. Invoice processing is not yet implemented.
+
+## Python environment and LangGraph example
+
+From the repository root, create an isolated environment and install dependencies
+(verified with Python 3.12):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python graph_example.py
+```
+
+On macOS/Linux, use `.venv/bin/python` in place of `.venv\Scripts\python`.
+The `.venv` directory stays local and is excluded from Git. `requirements.txt`
+pins the direct LangGraph dependency; its transitive dependencies are resolved by pip.
+Installation requires internet; the example runs locally without an API key or model call.
+
+Expected output:
+
+```text
+Input: {'message': 'Hello, InvoiceFlow'}
+Output: {'message': 'Received: Hello, InvoiceFlow'}
+```
+
+The graph follows `START -> acknowledge -> END`. Its state is a dictionary
+containing a message; the node returns an updated message. `TypedDict` describes
+the dictionary shape for type checking, not runtime data validation.
+This example demonstrates orchestration only, not an AI agent or invoice processing.
 
 ## Set up the inventory database
 
