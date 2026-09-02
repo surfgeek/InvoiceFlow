@@ -13,10 +13,11 @@ SEED_INVENTORY = [
 ]
 
 
-def setup_inventory(database_path=DATABASE_PATH):
+def setup_inventory(database_path: str | Path = DATABASE_PATH) -> None:
+    """Create missing inventory records without changing existing stock values."""
     connection = sqlite3.connect(database_path)
     try:
-        # Commit both changes together, or roll back if either fails.
+        # Commit seed inserts together, or roll them back if an insert fails.
         with connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS inventory "
