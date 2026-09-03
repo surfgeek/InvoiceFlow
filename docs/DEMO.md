@@ -50,6 +50,30 @@ The report lists outcomes and reasons, with expandable source findings, configur
 item matches, approval responses, payment receipts, and stage timestamps.
 The full folder includes deliberately blocked invoices, so exit code 1 is expected.
 
+## Reading the results
+
+Each JSON result has an `outcome`: `simulated_paid`, `already_paid`,
+`validation_blocked`, `pending_approval`, `rejected`, `payment_held`, or
+`processing_error`. The HTML report explains these in plain language. Folder
+summaries count each outcome separately; result order follows filenames even
+though processing runs concurrently.
+
+`processing.approval` retains recommendations, critique findings, and any mock VP
+response. `processing.payment` holds the receipt, including exact amount, currency,
+ID, and UTC timestamp. Source-review snapshots and findings remain under
+`processing.reviews`; configured matches and currency assumptions are recorded
+alongside them. Logs carry run/invoice IDs for correlation with these results.
+
+Duplicate checks run after validation using source-reviewed vendor and invoice
+number. Matching paid copies reuse their original receipt. Changed details under
+the same identity, or missing invoice numbers, hold payment for review. The reason
+is in `processing.payment_hold`. Changing approval configuration does not resolve
+a revision conflict; there is no review inbox or automatic revision reconciliation.
+
+Database setup is safe to rerun when upgrading: it creates missing tables and
+preserves stock and payment rows. Receipts produced before the payment ledger
+existed remain in their log files and are not imported automatically.
+
 ## What the implementation demonstrates
 
 | Evaluation area | Concrete evidence |
