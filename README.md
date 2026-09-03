@@ -134,6 +134,32 @@ single integration check, not evidence of accuracy across the fixture set.
 With validation enabled, this invoice reports unknown currency as a payment blocker.
 The review/correction flow has automated mocked coverage; it has not been tested live.
 
+## Process a folder
+
+Use `--invoice_dir` instead of `--invoice_path` to process every file directly in
+a folder, in case-insensitive filename order:
+
+```powershell
+.venv\Scripts\python main.py --invoice_dir=data/invoices > batch-results.json
+```
+
+Files run sequentially through the same graph, each with a fresh processing record.
+Subfolders are not traversed. Unsupported formats and processing failures appear
+as per-file errors, and subsequent files continue. Inventory validation remains
+read-only; files do not consume stock or affect one another.
+
+Batch JSON contains `results` and `summary`. Each result includes `invoice_path`,
+`exit_code`, and the same invoice, validation, or error/history fields as a single
+run. The summary reports `total`, `passed`, and `failed`. Exit code 0 means every
+file passed the implemented checks; exit code 1 means at least one failed.
+An empty, missing, or unreadable folder is reported to stderr with exit code 1
+before any API calls. The two input options are mutually exclusive.
+
+Every readable invoice uses paid model calls. Different files containing the
+same invoice are processed separately, including the supplied PDF/text variants.
+Save output outside the input folder so a later batch does not process its own
+results. Batch execution does not compare outputs to expected extraction answers.
+
 ## Source review and correction history
 
 A separate Grok call compares extracted fields with the original reader text.
@@ -246,6 +272,8 @@ failures during correction or re-review. CLI integration tests verify that
 unresolved review skips inventory validation and emits the retained history.
 Route tests cover read, extraction, review, correction, and inventory failures,
 plus repeated graph invocations without shared history.
+Folder CLI tests cover ordering, continued processing after errors, isolated
+histories, summary counts, invalid/empty folders, and exclusion of subfolders.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 

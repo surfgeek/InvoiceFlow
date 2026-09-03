@@ -14,6 +14,14 @@ It does not replace the assessment or imply additional functionality is complete
 
 ## Scope distinctions
 
+### Folder processing
+
+The CLI adds `--invoice_dir` alongside the assessment's single-file option.
+Files directly in the folder run sequentially in filename order with independent
+processing histories. Expected per-file failures do not stop the batch. Output
+contains per-file results and summary counts. Recursive discovery, duplicate
+invoice detection, and automatic comparison with expected answers are not implemented.
+
 ### Agreed validation policies
 
 - Unknown currency blocks payment. Implemented as a validation issue; extraction

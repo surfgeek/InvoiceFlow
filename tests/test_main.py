@@ -15,7 +15,7 @@ from validation import validate_invoice
 
 
 class MainTests(unittest.TestCase):
-    def run_cli(self, path, key="test-key", content=None, responses=None):
+    def run_cli(self, path, key="test-key", content=None, responses=None, folder=False):
         if content is None:
             content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
                                   "currency": "USD", "due_date": "2026-02-01",
@@ -26,7 +26,7 @@ class MainTests(unittest.TestCase):
         database = Path(directory.name) / "inventory.db"
         setup_inventory(database)
         with (
-            patch("sys.argv", ["main.py", "--invoice_path", str(path)]),
+            patch("sys.argv", ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path)]),
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
@@ -41,6 +41,11 @@ class MainTests(unittest.TestCase):
             code = main.main()
             self.validation_calls = validator.call_count
         return code, stdout.getvalue(), stderr.getvalue(), client
+
+    def make_folder(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        return Path(directory.name)
 
     def test_document_to_json(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
@@ -113,3 +118,71 @@ class MainTests(unittest.TestCase):
         self.assertEqual(self.validation_calls, 1)
         self.assertEqual(result["invoice"]["items"][0]["quantity"], "10")
         self.assertEqual(result["processing"]["reviews"][0]["invoice"]["items"][0]["quantity"], "1")
+
+    def test_folder_runs_in_order_continues_after_errors_and_skips_subfolders(self):
+        folder = self.make_folder()
+        (folder / "c.txt").write_text("Invoice C", encoding="utf-8")
+        (folder / "a.unsupported").write_text("Unreadable format", encoding="utf-8")
+        (folder / "b.txt").write_text("Invoice B", encoding="utf-8")
+        (folder / "nested").mkdir()
+        (folder / "nested" / "extra.txt").write_text("Nested invoice", encoding="utf-8")
+        invoice = json.dumps({"vendor": "Example", "amount": "10", "currency": "EUR",
+                              "due_date": "2026-02-01", "items": [{"name": "WidgetA", "quantity": "1"}]})
+        code, output, error, client = self.run_cli(
+            folder, folder=True, responses=["not JSON", invoice, '{"findings":[]}'],
+        )
+        result = json.loads(output)
+        self.assertEqual(code, 1)
+        self.assertEqual([Path(item["invoice_path"]).name for item in result["results"]],
+                         ["a.unsupported", "b.txt", "c.txt"])
+        self.assertEqual([item["exit_code"] for item in result["results"]], [1, 1, 0])
+        self.assertEqual(result["summary"], {"total": 3, "passed": 1, "failed": 2})
+        self.assertIn("a.unsupported", error)
+        self.assertIn("b.txt", error)
+        self.assertEqual(self.validation_calls, 1)
+        client.assert_called_once()
+        client.return_value.__exit__.assert_called_once()
+
+    def test_folder_success_keeps_each_invoice_history_separate(self):
+        folder = self.make_folder()
+        for name in ("a.txt", "b.txt"):
+            (folder / name).write_text("invoice", encoding="utf-8")
+        invoices = [json.dumps({"vendor": vendor, "amount": "10", "currency": "EUR",
+                               "due_date": "2026-02-01",
+                               "items": [{"name": "WidgetA", "quantity": "1"}]})
+                    for vendor in ("First", "Second")]
+        code, output, error, _ = self.run_cli(folder, folder=True, responses=[
+            invoices[0], '{"findings":[]}', invoices[1], '{"findings":[]}',
+        ])
+        result = json.loads(output)
+        self.assertEqual(code, 0)
+        self.assertEqual(error, "")
+        self.assertEqual(result["summary"], {"total": 2, "passed": 2, "failed": 0})
+        self.assertEqual([item["processing"]["reviews"][0]["invoice"]["vendor"]
+                          for item in result["results"]], ["First", "Second"])
+        self.assertTrue(all(len(item["processing"]["reviews"]) == 1 for item in result["results"]))
+
+    def test_empty_folder_is_reported_without_api_calls(self):
+        code, output, error, client = self.run_cli(self.make_folder(), folder=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(output, "")
+        self.assertIn("no files", error)
+        client.assert_not_called()
+
+    def test_invalid_folder_is_reported_without_api_calls(self):
+        folder = self.make_folder()
+        file = folder / "invoice.txt"
+        file.write_text("invoice", encoding="utf-8")
+        for path in (folder / "missing", file):
+            with self.subTest(path=path):
+                code, output, error, client = self.run_cli(path, folder=True)
+                self.assertEqual(code, 1)
+                self.assertEqual(output, "")
+                self.assertIn("existing folder", error)
+                client.assert_not_called()
+
+    def test_single_file_and_folder_options_are_mutually_exclusive(self):
+        with patch("sys.argv", ["main.py", "--invoice_path", "a.txt", "--invoice_dir", "."]), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            main.main()
+        self.assertEqual(raised.exception.code, 2)
