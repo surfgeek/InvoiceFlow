@@ -11,20 +11,21 @@ Supported inputs: TXT, CSV, JSON, XML, Markdown, and text-based PDF. See the
 
 You need **Python 3.12** and Git. Install dependencies while connected to the internet:
 
-```powershell
+```bash
 git clone https://github.com/surfgeek/InvoiceFlow.git
 cd InvoiceFlow
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
+source .venv/Scripts/activate
+python -m pip install -r requirements.txt
 ```
 
-Run all remaining commands from this repository folder. Examples use Windows paths;
-on macOS/Linux, replace `.\.venv\Scripts\python` with `.venv/bin/python`.
+Run all remaining commands from this repository folder with the virtual environment
+active. On macOS/Linux, activate it with `source .venv/bin/activate` instead.
 
 **Create the required database before running the app:**
 
-```powershell
-.\.venv\Scripts\python setup_inventory.py
+```bash
+python setup_inventory.py
 ```
 
 This single setup command initializes inventory stock (WidgetA 15, WidgetB 10,
@@ -46,8 +47,8 @@ Keys, databases, and operational logs are excluded from Git.
 
 **Start here: process the provided invoices and create a readable report.**
 
-```powershell
-.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=results.html > results.json
+```bash
+python main.py --invoice_dir=data/invoices --report=results.html > results.json
 ```
 
 Open `results.html` in your browser. It shows outcomes, reasons, and expandable
@@ -60,18 +61,18 @@ Use a new report filename when rerunning; existing reports are not overwritten.
 
 Other examples:
 
-```powershell
+```bash
 # One invoice, offline
-.\.venv\Scripts\python main.py --offline --invoice_path=data/invoices/invoice_1001.txt
+python main.py --offline --invoice_path=data/invoices/invoice_1001.txt
 
 # Offline demo of the provided folder, with a report
-.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
+python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
 
 # Your own folder of supported invoices (live Grok)
-.\.venv\Scripts\python main.py --invoice_dir="C:/Invoices"
+python main.py --invoice_dir="C:/Invoices"
 
 # Automated tests; no API calls
-.\.venv\Scripts\python -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
 ```
 
 Offline mode recognizes unchanged bundled invoice text, including renamed copies
@@ -147,8 +148,8 @@ processing. Keep secrets in `.env`.
 
 Optional overrides:
 
-```powershell
-.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --workers=2 --config=config.toml --log_dir=logs
+```bash
+python main.py --offline --invoice_dir=data/invoices --workers=2 --config=config.toml --log_dir=logs
 ```
 
 `--workers` overrides the worker count. In live mode, `XAI_MODEL` overrides

@@ -11,8 +11,8 @@ outcomes, not just successful payments.
 Complete the [README setup](../README.md#how-to-set-up) once. From the repository
 folder, run:
 
-```powershell
-.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=results.html > results.json
+```bash
+python main.py --invoice_dir=data/invoices --report=results.html > results.json
 ```
 
 Open `results.html` in your browser. The terminal shows progress and outcome
@@ -84,8 +84,8 @@ If the API request fails, the affected invoice stops with an error; the app does
 not silently replace live processing with simulated answers. Retry when access is
 restored, or explicitly run the local demo:
 
-```powershell
-.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
+```bash
+python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
 ```
 
 `--offline` replays scripted model responses for the unchanged supplied documents
