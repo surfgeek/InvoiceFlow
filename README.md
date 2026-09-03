@@ -15,8 +15,9 @@ Document text reading is implemented in `document_reader.py`.
 Grok extraction is implemented in `extraction.py`, with a CLI in `main.py`.
 LangGraph is the selected orchestration framework. The extraction CLI is not yet
 connected to a graph. Required-field and SQLite inventory checks are implemented
-in `validation.py`; approval, payment, extraction review, self-correction,
-and runtime processing events are not yet implemented.
+in `validation.py`. Source review and one correction attempt are implemented in
+`source_review.py`, with review history and UTC ingestion/validation events in
+CLI output. Approval, payment, and graph orchestration remain pending.
 
 ## Python environment and LangGraph example
 
@@ -73,7 +74,7 @@ or overwriting existing stock values. The generated database is excluded from Gi
 PDF documents. The bundled Markdown plugin also supports MD. Text files use UTF-8,
 with an optional byte-order mark. PDF text is
 read across all pages using pypdf. The function does not extract invoice fields,
-parse structured formats, or correct source values; all supported formats will
+parse structured formats, or correct source values; all supported formats
 pass through Grok for invoice-field extraction and normalization.
 
 Missing files, unsupported formats, decoding failures, corrupt or encrypted PDFs,
@@ -107,21 +108,54 @@ It requires internet access and a funded API key. External inventory, approval,
 and payment services are not called. The reader supplies text for every supported
 format; Grok extracts and normalizes the fields using a JSON schema generated
 from `Invoice`. Decimal fields are requested as strings to preserve precision.
-Pydantic validates the returned structure locally, then Python checks the invoice
-against the local inventory. JSON output contains `invoice` and `validation_issues`.
+Pydantic validates the returned structure locally. Grok then reviews the extraction
+against the source before Python checks local inventory. JSON output contains
+`invoice`, `validation_issues`, and a `processing` record with events and review history.
 
-The command currently makes one extraction request, with a 60-second timeout
-and a 2,048-token output limit. Incomplete output is rejected. Errors go to stderr
-with exit code 1. Validation issues are printed in JSON and also return exit code 1;
-exit code 0 means extraction and the implemented validation checks passed.
-It does not mean the invoice is approved or its extraction is verified against the source.
-There is no automatic correction or retry loop yet.
+The command makes two model calls for a clean extraction, or at most four when
+correction is needed. Each call has a 60-second timeout. Extraction has a 2,048-token
+output limit; review has a 4,096-token limit. Incomplete output is rejected.
+Processing failures write an error to stderr and JSON containing `error` and the
+`processing` record to stdout, with exit code 1. Missing credentials and argument
+errors occur before processing and are reported to stderr only. Validation issues
+also return exit code 1. Exit code 0 means extraction, source review, and the
+implemented validation checks passed; it does not mean approval or payment.
 
 A live check of `invoice_1001.txt` returned Widgets Inc., amount `5000.00`,
 WidgetA quantity `10`, WidgetB quantity `5`, and due date `2026-02-01`, matching
 the source. Currency remained null because `$` alone is ambiguous. This is a
 single integration check, not evidence of accuracy across the fixture set.
 With validation enabled, this invoice reports unknown currency as a payment blocker.
+The review/correction flow has automated mocked coverage; it has not been tested live.
+
+## Source review and correction history
+
+A separate Grok call compares extracted fields with the original reader text.
+Findings identify the field or item, extracted value, source excerpt (or null
+when unavailable), and explanation. Each application-stamped review includes
+its attempt number, UTC start timestamp, outcome, and a snapshot of the invoice.
+Source excerpts and explanations are reviewer claims, not independently verified evidence.
+
+When findings exist, extraction receives the original source, previous invoice,
+and findings for one correction attempt. The corrected invoice is reviewed again.
+Only a clean review permits Python validation. Unresolved discrepancies or model
+failures stop processing while preserving earlier findings and invoice snapshots.
+If the second review passes, original findings are marked `corrected`. Otherwise,
+they retain `unresolved` or `unable_to_determine`; partial corrections are not
+individually marked resolved. The second snapshot remains available for comparison.
+
+The reviewer follows the same normalization rules as extraction. For example,
+an ambiguous currency correctly represented as null is not an extraction mistake;
+Python validation still reports it as a payment blocker. Corrections must follow
+the source, even when that causes business validation to fail. Reusing the same
+model can repeat an error, so review reduces risk without guaranteeing correctness.
+
+History is included in stdout JSON, not automatically stored in a database or file.
+To retain the full result locally:
+
+```powershell
+.venv\Scripts\python main.py --invoice_path=data/invoices/invoice_1001.txt > result.json
+```
 
 ## Invoice validation
 
@@ -137,7 +171,7 @@ Negative lines cannot cancel positive quantities. Validation opens SQLite read-o
 and does not reserve or decrement stock. Fractional positive quantities are accepted;
 no whole-unit restriction, past-due rejection, or approval amount threshold is imposed.
 
-These are prototype business rules. Source comparison, arithmetic reconciliation
+These are prototype business rules. Arithmetic reconciliation
 of invoice totals, currency-code verification, and the approval/payment stages
 are not yet implemented. A nonempty currency field alone does not verify a currency.
 
@@ -167,9 +201,10 @@ Passing schema validation does not establish invoice correctness or approval.
 `ProcessingEvent` entries identify a stage, status, timestamp, and optional reason.
 Stages are ingestion, validation, approval, and payment; statuses are started,
 completed, and failed. The application must supply timezone-aware timestamps;
-the models normalize them to UTC while preserving the instant. No timestamps are
-generated automatically. Recording events and handling extraction errors will be
-implemented with the workflow.
+the models normalize them to UTC while preserving the instant. The CLI generates
+arrival and ingestion/validation timestamps. Ingestion includes extraction,
+source review, and correction. The record's `reviews` list retains every attempted
+review, findings, and invoice snapshots, including when processing fails.
 
 ## Tests
 
@@ -199,6 +234,10 @@ Validation tests cover required fields, repeated items, stock boundaries, exact
 quantity aggregation, unknown currency, unchanged stock, and database failures.
 The automated suite makes
 no paid model calls and does not load a real API key.
+Source-review tests cover clean reviews, bounded correction, original snapshots,
+retained findings, uncertain source data, malformed/incomplete reviews, and API
+failures during correction or re-review. CLI integration tests verify that
+unresolved review skips inventory validation and emits the retained history.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 

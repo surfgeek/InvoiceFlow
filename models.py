@@ -54,6 +54,36 @@ class ProcessingEvent(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class ReviewFinding(BaseModel):
+    """A reviewer-reported discrepancy, with its retained resolution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(min_length=1)
+    extracted_value: str | None
+    source_evidence: str | None
+    explanation: str = Field(min_length=1)
+    resolution: Literal["unresolved", "corrected", "unable_to_determine"] = "unresolved"
+
+
+class ReviewAttempt(BaseModel):
+    """Application-stamped review and the exact invoice it examined."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt: int
+    timestamp: AwareDatetime
+    invoice: Invoice
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    outcome: Literal["passed", "issues", "failed"] = "failed"
+    error: str | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        return value.astimezone(timezone.utc)
+
+
 class ProcessingRecord(BaseModel):
     """System metadata kept separate from the contents of the invoice."""
 
@@ -61,6 +91,7 @@ class ProcessingRecord(BaseModel):
 
     received_at: AwareDatetime
     events: list[ProcessingEvent] = Field(default_factory=list)
+    reviews: list[ReviewAttempt] = Field(default_factory=list)
 
     @field_validator("received_at")
     @classmethod
