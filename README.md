@@ -97,11 +97,12 @@ Set `XAI_API_KEY` in the environment or in a local `.env` file beside `main.py`:
 
 ```dotenv
 XAI_API_KEY=your-api-key
-XAI_MODEL=grok-4.6
 ```
 
 The `.env` file is excluded from Git. Existing environment variables take
-precedence over the file. `XAI_MODEL` is optional and defaults to `grok-4.6`.
+precedence over `.env`. Non-secret settings live in `config.toml` as described
+below. The optional legacy `XAI_MODEL` environment variable overrides the model
+name in configuration.
 Run:
 
 ```powershell
@@ -119,10 +120,10 @@ against the source before Python checks local inventory. JSON output contains
 `invoice`, `validation_issues`, and a `processing` record with events and review history.
 
 The command makes two model calls for a clean extraction, or at most four when
-correction is needed. Each call has a 60-second timeout. Extraction has a 2,048-token
+correction is needed. The bundled configuration sets a 60-second timeout per call. Extraction has a 2,048-token
 output limit; review has a 4,096-token limit. Incomplete output is rejected.
-Both calls explicitly use low reasoning effort to avoid Grok 4.6's high default
-for these focused tasks.
+Both calls use the configured reasoning effort, set to low in the bundled file
+to avoid Grok 4.6's high default for these focused tasks.
 Processing failures write an error to stderr and JSON containing `error` and the
 `processing` record to stdout, with exit code 1. Missing credentials and argument
 errors occur before processing and are reported to stderr only. Validation issues
@@ -133,12 +134,92 @@ A live check of `invoice_1001.txt` returned Widgets Inc., amount `5000.00`,
 WidgetA quantity `10`, WidgetB quantity `5`, and due date `2026-02-01`, matching
 the source. Currency remained null because `$` alone is ambiguous. This is a
 single integration check, not evidence of accuracy across the fixture set.
-With validation enabled, this invoice reports unknown currency as a payment blocker.
+That historical run preceded the currency configuration. With the bundled
+`assume` policy, a reviewed unqualified dollar in invoice 1001 now resolves to USD.
+With `reject`, it remains unknown and blocks progression.
 One live extraction and clean source review of invoice 1001 with low reasoning
 took approximately 4.0 and 3.6 seconds respectively and preserved the expected
 fields. The earlier default-reasoning run took approximately 10.7 and 14.4 seconds
 for that file. These are individual observations, not latency guarantees or
 accuracy evaluations. The correction path has mocked coverage, not a live test.
+
+## Configuration and currency policy
+
+`config.toml` beside the application is loaded and validated at startup. Edit it
+before the next run; no rebuild is needed. Select another file with `--config`.
+Secrets stay in `.env`, not in the configuration file.
+
+```toml
+[model]
+name = "grok-4.6"
+reasoning_effort = "low"
+timeout_seconds = 60
+
+[batch]
+workers = 4
+
+[currency.unqualified_dollar]
+action = "assume"
+currency = "USD"
+```
+
+`--workers` overrides `batch.workers`. If present, `XAI_MODEL` overrides
+`model.name`; an actual environment variable takes precedence over `.env`.
+Reasoning effort and timeout come from configuration and apply to extraction,
+review, and correction calls. The selected model must support these settings.
+
+**Unqualified dollar** means a `$` associated with an invoice amount, without a
+clear currency identifier anywhere in the document. A dollar sign in unrelated
+text is not sufficient. Vendor location alone does not qualify the currency.
+An explicit currency declaration applies to the amount even if it appears elsewhere
+in the document. Conflicting declarations never trigger a fallback.
+
+| Invoice text | Classification and behavior |
+| --- | --- |
+| `$5,000` with no currency declaration | Unqualified dollar: apply configured action. |
+| `USD 5,000` or `US$5,000` | Explicit USD: preserve USD. |
+| `$5,000` plus `Currency: USD` | Explicit USD: preserve USD. |
+| `CAD 5,000`, `CA$5,000`, or `$5,000` plus `Currency: CAD` | Explicit CAD: preserve CAD. |
+| `EUR 5,000` | Explicit EUR: preserve EUR. |
+| `5,000` with no currency indication | Missing currency: block progression. |
+| Incompatible currency declarations or unexplained mixed currencies | Conflicting: block progression. |
+
+Grok extracts the currency qualification from the document and the source reviewer
+checks it. Python applies the configuration after review; it does not scan for any
+`$` anywhere and assume USD. Classification is model-based and can still be wrong.
+An omitted qualification does not authorize a fallback.
+
+To **assume USD** for an unqualified dollar, use the bundled setting:
+
+```toml
+[currency.unqualified_dollar]
+action = "assume"
+currency = "USD"
+```
+
+To **reject an unqualified dollar**, change the action:
+
+```toml
+[currency.unqualified_dollar]
+action = "reject"
+```
+
+You may leave `currency = "USD"` in place when changing the action to `reject`;
+it is ignored. Reject leaves currency unknown and reports a validation issue,
+with exit code 1. It does not prevent reading, extraction, source review, or
+inventory checks. No payment stage is implemented yet.
+
+Assume sets the final currency and records a reason in
+`processing.currency_assumption`, plus a `currency_assumed` operational event.
+The source-review snapshot retains its original null currency and qualification.
+Explicit currencies are preserved. Missing currency and conflicting declarations
+receive no fallback under either action. No currency conversion is performed.
+
+Unknown keys/actions, malformed TOML, nonpositive worker counts/timeouts, and
+`assume` without a currency fail startup before model calls. Currency settings
+must be three uppercase letters; a full ISO currency registry is not validated.
+Omitted model/batch settings use the defaults above. An omitted dollar policy
+safely defaults to `reject`; the bundled file explicitly selects `assume` with USD.
 
 ## Process a folder
 
@@ -229,7 +310,8 @@ individually marked resolved. The second snapshot remains available for comparis
 
 The reviewer follows the same normalization rules as extraction. For example,
 an ambiguous currency correctly represented as null is not an extraction mistake;
-Python validation still reports it as a payment blocker. Corrections must follow
+the currency policy then either supplies the configured fallback or leaves it
+unknown for validation to block. Corrections must follow
 the source, even when that causes business validation to fail. Reusing the same
 model can repeat an error, so review reduces risk without guaranteeing correctness.
 
@@ -243,7 +325,8 @@ To retain the full result locally:
 ## Invoice validation
 
 The implemented rules require a nonblank vendor, positive amount, due date,
-and at least one item with a nonblank name and positive quantity. Unknown currency
+and at least one item with a nonblank name and positive quantity. Currency still
+unknown after applying configuration
 is reported as a payment blocker without skipping the remaining checks.
 All detected issues are collected. Missing inventory or an unreadable database
 is an operational error, not evidence of an invalid invoice.
@@ -269,8 +352,10 @@ DOCX and PNG are extension examples, not currently bundled capabilities.
 ## Data records
 
 `Invoice` contains vendor, amount, currency, items, and due date. `InvoiceItem`
-contains an item name and quantity. Missing fields remain `None`; currency is not
-inferred. Amounts and quantities use finite `Decimal` values without rounding or
+contains an item name and quantity. Missing source fields remain `None`.
+`currency_qualification` records whether the source currency is explicit, an
+unqualified dollar, missing, or conflicting. A configured currency assumption
+is applied only after source review and recorded separately in processing metadata. Amounts and quantities use finite `Decimal` values without rounding or
 currency conversion. Pass decimal strings or `Decimal` objects to avoid precision
 loss before validation. Negative and fractional values remain available for
 business validation rather than being silently corrected.
@@ -323,6 +408,9 @@ failures during correction or re-review. CLI integration tests verify that
 unresolved review skips inventory validation and emits the retained history.
 Route tests cover read, extraction, review, correction, and inventory failures,
 plus repeated graph invocations without shared history.
+Configuration and currency-policy tests cover invalid settings, model settings,
+assume/reject outcomes, explicit currencies, missing/conflicting currency, and
+retention of the original reviewed currency alongside the recorded assumption.
 Folder CLI tests cover ordering, continued processing after errors, isolated
 histories, summary counts, invalid/empty folders, and exclusion of subfolders.
 Logging tests cover flushed JSON entries, UTC timestamps, usage and timing fields,

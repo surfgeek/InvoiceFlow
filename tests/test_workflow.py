@@ -183,7 +183,7 @@ class WorkflowTests(unittest.TestCase):
         barrier = Barrier(2, timeout=5)
         graph = build_workflow(self.client)
 
-        def extract(text, client, model):
+        def extract(text, client, model, reasoning_effort):
             barrier.wait()
             return Invoice(vendor=text)
 

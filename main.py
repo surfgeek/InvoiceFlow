@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from langgraph.graph.state import CompiledStateGraph
 from xai_sdk import Client
 
-from extraction import DEFAULT_MODEL
+from configuration import DEFAULT_CONFIG_PATH, load_config
 from models import ProcessingRecord
 from operational_logging import current_run_id, log_event, log_run
 from workflow import build_workflow
@@ -75,12 +75,19 @@ def main() -> int:
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--invoice_path", type=Path, help="Process one invoice file.")
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")
-    parser.add_argument("--workers", type=int, default=4, help="Concurrent folder workers (default: 4).")
+    parser.add_argument("--workers", type=int, help="Override configured concurrent folder workers.")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="TOML configuration file.")
     parser.add_argument("--log_dir", type=Path, default=Path(__file__).resolve().parent / "logs",
                         help="Directory for per-run structured operational logs.")
     args = parser.parse_args()
-    if args.workers < 1:
+    if args.workers is not None and args.workers < 1:
         parser.error("--workers must be at least 1")
+    try:
+        settings = load_config(args.config)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    workers = args.workers if args.workers is not None else settings.batch.workers
     if args.invoice_dir is not None:
         try:
             if not args.invoice_dir.is_dir():
@@ -103,12 +110,14 @@ def main() -> int:
 
     with log_run(args.log_dir) as (_, log_path):
         print(f"Operational log: {log_path}", file=sys.stderr, flush=True)
-        with Client(api_key=api_key, timeout=60) as client:
-            graph = build_workflow(client, os.getenv("XAI_MODEL") or DEFAULT_MODEL)
+        with Client(api_key=api_key, timeout=settings.model.timeout_seconds) as client:
+            graph = build_workflow(client, os.getenv("XAI_MODEL") or settings.model.name,
+                                   reasoning_effort=settings.model.reasoning_effort,
+                                   dollar_policy=settings.currency.unqualified_dollar)
             if args.invoice_dir is None:
                 output, exit_code = process_invoice(graph, paths[0])
             else:
-                output = process_folder(graph, paths, args.workers)
+                output = process_folder(graph, paths, workers)
                 exit_code = 1 if output["summary"]["failed"] else 0
         log_event("run_result", exit_code=exit_code, file_count=len(paths))
         print(json.dumps(output, indent=2))

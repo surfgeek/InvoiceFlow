@@ -66,11 +66,11 @@ def log_run(directory: Path):
         handler.close()
 
 
-def sample_logged(chat, model: str):
+def sample_logged(chat, model: str, reasoning_effort: str = "low"):
     """Measure a logical SDK call; transport retries are internal to the SDK."""
     call_id = str(uuid4())
     started = monotonic()
-    fields = {"call_id": call_id, "model": model, "reasoning_effort": "low"}
+    fields = {"call_id": call_id, "model": model, "reasoning_effort": reasoning_effort}
     log_event("model_call_started", **fields)
     try:
         response = chat.sample()

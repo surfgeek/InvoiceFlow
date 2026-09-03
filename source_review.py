@@ -47,11 +47,12 @@ Extraction rules:
 """ + EXTRACTION_PROMPT
 
 
-def review_invoice(text: str, invoice: Invoice, client: Client, model: str) -> SourceReview:
+def review_invoice(text: str, invoice: Invoice, client: Client, model: str,
+                   reasoning_effort: str = "low") -> SourceReview:
     """Make a separate structured review call and reject incomplete responses."""
     chat = client.chat.create(
         model=model,
-        reasoning_effort="low",
+        reasoning_effort=reasoning_effort,
         messages=[system(REVIEW_PROMPT), user(json.dumps({
             "source": text, "invoice": invoice.model_dump(mode="json"),
         }))],
@@ -60,7 +61,7 @@ def review_invoice(text: str, invoice: Invoice, client: Client, model: str) -> S
         store_messages=False,
     )
     try:
-        response = sample_logged(chat, model)
+        response = sample_logged(chat, model, reasoning_effort)
     except RpcError as error:
         raise ExtractionError("Source review request failed; no result accepted.") from error
     if response.finish_reason != "REASON_STOP":

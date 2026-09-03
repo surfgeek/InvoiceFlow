@@ -11,6 +11,8 @@ from langgraph.graph import END, START, StateGraph
 from xai_sdk import Client
 
 from document_reader import DocumentReadError, read_document
+from configuration import DollarPolicy
+from currency_policy import apply_currency_policy
 from extraction import DEFAULT_MODEL, ExtractionError, extract_invoice
 from models import Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
 from operational_logging import log_event, logging_context
@@ -65,14 +67,15 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
 
 
 def build_workflow(client: Client, model: str = DEFAULT_MODEL,
-                   database_path: str | Path = DATABASE_PATH):
+                   database_path: str | Path = DATABASE_PATH, *,
+                   reasoning_effort: str = "low", dollar_policy: DollarPolicy | None = None):
     """Compile a sequential graph with at most one source-correction detour."""
     def read(state: WorkflowState) -> WorkflowState:
         add_event(state["record"], "ingestion", "started")
         return {"text": read_document(state["invoice_path"])}
 
     def extract(state: WorkflowState) -> WorkflowState:
-        return {"invoice": extract_invoice(state["text"], client, model)}
+        return {"invoice": extract_invoice(state["text"], client, model, reasoning_effort=reasoning_effort)}
 
     def review(state: WorkflowState) -> WorkflowState:
         record = state["record"]
@@ -82,7 +85,7 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
         )
         record.reviews.append(attempt)
         try:
-            result = review_invoice(state["text"], state["invoice"], client, model)
+            result = review_invoice(state["text"], state["invoice"], client, model, reasoning_effort)
         except ExtractionError as error:
             attempt.error = str(error)
             raise
@@ -108,14 +111,19 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
     def correct(state: WorkflowState) -> WorkflowState:
         return {"invoice": extract_invoice(
             state["text"], client, model, correction_feedback=state["correction_feedback"],
+            reasoning_effort=reasoning_effort,
         )}
 
     def validate(state: WorkflowState) -> WorkflowState:
         add_event(state["record"], "validation", "started")
-        issues = validate_invoice(state["invoice"], database_path)
+        invoice, assumption = apply_currency_policy(state["invoice"], dollar_policy or DollarPolicy())
+        state["record"].currency_assumption = assumption
+        if assumption:
+            log_event("currency_assumed", currency=invoice.currency, policy="unqualified_dollar")
+        issues = validate_invoice(invoice, database_path)
         add_event(state["record"], "validation", "failed" if issues else "completed",
                   "; ".join(issues) if issues else None)
-        return {"validation_issues": issues}
+        return {"invoice": invoice, "validation_issues": issues}
 
     def after_review(state: WorkflowState) -> str:
         if state.get("error"):

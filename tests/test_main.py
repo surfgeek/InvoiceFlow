@@ -16,7 +16,7 @@ from validation import validate_invoice
 
 
 class MainTests(unittest.TestCase):
-    def run_cli(self, path, key="test-key", content=None, responses=None, folder=False):
+    def run_cli(self, path, key="test-key", content=None, responses=None, folder=False, config_text=None):
         if content is None:
             content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
                                   "currency": "USD", "due_date": "2026-02-01",
@@ -26,9 +26,14 @@ class MainTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         database = Path(directory.name) / "inventory.db"
         setup_inventory(database)
+        argv = ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path),
+                "--workers", "1", "--log_dir", str(Path(directory.name) / "logs")]
+        if config_text is not None:
+            config_path = Path(directory.name) / "config.toml"
+            config_path.write_text(config_text, encoding="utf-8")
+            argv.extend(["--config", str(config_path)])
         with (
-            patch("sys.argv", ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path),
-                               "--workers", "1", "--log_dir", str(Path(directory.name) / "logs")]),
+            patch("sys.argv", argv),
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
@@ -213,3 +218,34 @@ class MainTests(unittest.TestCase):
             ]), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
                 main.main()
             self.assertEqual(raised.exception.code, 2)
+
+    def test_configured_dollar_policy_controls_single_invoice_outcome(self):
+        path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
+        content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
+                              "currency_qualification": "unqualified_dollar", "due_date": "2026-02-01",
+                              "items": [{"name": "WidgetA", "quantity": "10"}]})
+        for action, expected_code in (("assume", 0), ("reject", 1)):
+            with self.subTest(action=action):
+                code, output, _, _ = self.run_cli(path, content=content, config_text=
+                    f'[currency.unqualified_dollar]\naction="{action}"\ncurrency="USD"')
+                result = json.loads(output)
+                self.assertEqual(code, expected_code)
+                self.assertEqual(result["invoice"]["currency"], "USD" if action == "assume" else None)
+                self.assertEqual(bool(result["processing"]["currency_assumption"]), action == "assume")
+
+    def test_invalid_config_does_not_call_api(self):
+        code, output, error, client = self.run_cli("invoice.txt", config_text=
+            '[currency.unqualified_dollar]\naction="assume"')
+        self.assertEqual(code, 1)
+        self.assertEqual(output, "")
+        self.assertIn("currency is required", error)
+        client.assert_not_called()
+
+    def test_model_configuration_reaches_client_and_requests(self):
+        path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
+        _, _, _, client = self.run_cli(path, config_text=
+            '[model]\nname="configured-model"\nreasoning_effort="medium"\ntimeout_seconds=25')
+        self.assertEqual(client.call_args.kwargs["timeout"], 25)
+        calls = client.return_value.__enter__.return_value.chat.create.call_args_list
+        self.assertTrue(all(call.kwargs["model"] == "configured-model" for call in calls))
+        self.assertTrue(all(call.kwargs["reasoning_effort"] == "medium" for call in calls))

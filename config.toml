@@ -1,0 +1,15 @@
+# Non-secret application settings. API keys belong in .env.
+[model]
+name = "grok-4.6"
+reasoning_effort = "low"
+timeout_seconds = 60
+
+[batch]
+workers = 4
+
+# An unqualified dollar is $ attached to an amount with no clear currency
+# identifier anywhere in the document. Explicit or conflicting currencies
+# and amounts with no currency indication do not use this fallback.
+[currency.unqualified_dollar]
+action = "assume" # Change to "reject" to block instead.
+currency = "USD"  # Required for assume; ignored for reject.
