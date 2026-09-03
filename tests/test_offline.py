@@ -65,10 +65,13 @@ class OfflineTests(unittest.TestCase):
     def test_all_bundled_formats_exercise_business_outcomes(self):
         code, result, _ = self.run_cli(ROOT / "data/invoices", folder=True)
         self.assertEqual(code, 1)
-        self.assertEqual(result["summary"], {"total": 20, "simulated_paid": 5, "already_paid": 2,
-            "payment_held": 1, "validation_blocked": 11, "pending_approval": 1,
+        self.assertEqual(result["summary"], {"total": 21, "simulated_paid": 5, "already_paid": 2,
+            "payment_held": 1, "validation_blocked": 11, "pending_approval": 2,
             "rejected": 0, "processing_error": 0})
         self.assertTrue(all(item["processing"]["mode"] == "offline" for item in result["results"]))
+        vp_result = next(item for item in result["results"]
+                         if item.get("invoice", {}).get("invoice_number") == "DEMO-HIGH-001")
+        self.assertEqual(vp_result["processing"]["approval"]["vp_response"]["status"], "pending")
 
     def test_aliases_preserve_source_and_appear_in_report(self):
         path = ROOT / "data/invoices/invoice_1010.txt"

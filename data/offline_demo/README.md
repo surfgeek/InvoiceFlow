@@ -1,8 +1,9 @@
 # Offline model fixtures
 
 `responses.json` maps hashes of reader-produced text to explicit invoice fixtures.
-It covers the 20 assessment files and `high_value.txt`, an added authorization
-scenario. The fixtures are committed data; generating or using them does not
+It covers the 20 assessment files and one added high-value authorization scenario,
+available in the normal batch as `data/invoices/invoice_vp_review.txt`. The fixtures
+are committed data; generating or using them does not
 require an API key. Changes to input text deliberately invalidate the match.
 
 The assessment fixtures were prepared from inspected sample documents and prior

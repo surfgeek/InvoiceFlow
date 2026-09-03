@@ -3,8 +3,9 @@
 InvoiceFlow processes the supplied invoice folder and explains which documents
 can proceed to simulated payment, which need attention, and why. The supplied
 files intentionally include clean invoices, missing data, inventory problems,
-duplicate copies, and revisions. A useful run will therefore include several
-outcomes, not just successful payments.
+duplicate copies, and revisions. The folder also includes one clearly labeled
+InvoiceFlow scenario that reaches the additional VP review route. A useful run
+will therefore include several outcomes, not just successful payments.
 
 ## Start with the provided invoices
 

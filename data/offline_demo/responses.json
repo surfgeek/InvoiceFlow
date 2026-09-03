@@ -585,7 +585,8 @@
   },
   "645daac94f2290b218239a006c30b5dfa15cb1c562d8a9273446e5a9bd8af619": {
     "source_files": [
-      "data/offline_demo/high_value.txt"
+      "data/offline_demo/high_value.txt",
+      "data/invoices/invoice_vp_review.txt"
     ],
     "invoice": {
       "vendor": "Demo Manufacturing",

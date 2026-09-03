@@ -1,0 +1,10 @@
+INVOICE
+Vendor: Demo Manufacturing
+Invoice Number: DEMO-HIGH-001
+Due Date: 2026-10-01
+Currency: USD
+Items:
+WidgetA quantity: 5 unit price: USD 2500.00
+Subtotal: USD 12500.00
+Tax: USD 0.00
+Total Amount: USD 12500.00
