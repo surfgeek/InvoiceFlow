@@ -20,7 +20,7 @@ class DocumentReaderTests(unittest.TestCase):
 
     def test_every_supplied_document_provides_text(self) -> None:
         paths = sorted(SAMPLES.iterdir())
-        self.assertEqual(len(paths), 20)
+        self.assertEqual(len(paths), 21)
         for path in paths:
             with self.subTest(document=path.name):
                 self.assertTrue(read_document(path).strip())
