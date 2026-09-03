@@ -17,8 +17,9 @@ It does not replace the assessment or imply additional functionality is complete
 ### Folder processing
 
 The CLI adds `--invoice_dir` alongside the assessment's single-file option.
-Files directly in the folder run sequentially in filename order with independent
-processing histories. Expected per-file failures do not stop the batch. Output
+Files directly in the folder run with four concurrent workers by default
+(configurable with `--workers`) and independent processing histories. Results
+retain filename order and include elapsed time per file. Expected per-file failures do not stop the batch. Output
 contains per-file results and summary counts. Recursive discovery, duplicate
 invoice detection, and automatic comparison with expected answers are not implemented.
 

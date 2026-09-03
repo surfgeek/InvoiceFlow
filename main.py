@@ -4,8 +4,10 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 
 from dotenv import load_dotenv
 from langgraph.graph.state import CompiledStateGraph
@@ -31,13 +33,42 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     return output, exit_code
 
 
+def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -> dict:
+    """Process independent invoices concurrently, retaining filename order in JSON."""
+    def run(index: int, path: Path) -> dict:
+        print(f"[{index}/{len(paths)}] Processing {path.name}...", file=sys.stderr, flush=True)
+        started = monotonic()
+        item, code = process_invoice(graph, path)
+        elapsed = round(monotonic() - started, 2)
+        status = "Passed" if code == 0 else "Failed"
+        print(f"[{index}/{len(paths)}] {status}: {path.name} ({elapsed:.2f}s)",
+              file=sys.stderr, flush=True)
+        return {"invoice_path": str(path), "exit_code": code, "elapsed_seconds": elapsed, **item}
+
+    # Each invocation owns its state; the shared graph and client contain no
+    # per-invoice history. Stock validation only reads the database.
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(workers, len(paths))) as executor:
+        pending = {executor.submit(run, index, path): index for index, path in enumerate(paths, start=1)}
+        for future in as_completed(pending):
+            results[pending[future]] = future.result()
+    ordered = [results[index] for index in sorted(results)]
+    failed = sum(item["exit_code"] != 0 for item in ordered)
+    return {"results": ordered, "summary": {
+        "total": len(ordered), "passed": len(ordered) - failed, "failed": failed,
+    }}
+
+
 def main() -> int:
     """Print extraction and validation results, or report an operational failure."""
     parser = argparse.ArgumentParser(description="Extract and validate an invoice using Grok and SQLite.")
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--invoice_path", type=Path, help="Process one invoice file.")
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")
+    parser.add_argument("--workers", type=int, default=4, help="Concurrent folder workers (default: 4).")
     args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
     if args.invoice_dir is not None:
         try:
             if not args.invoice_dir.is_dir():
@@ -63,18 +94,8 @@ def main() -> int:
         if args.invoice_dir is None:
             output, exit_code = process_invoice(graph, paths[0])
         else:
-            results = []
-            for index, path in enumerate(paths, start=1):
-                print(f"[{index}/{len(paths)}] Processing {path.name}...", file=sys.stderr, flush=True)
-                item, code = process_invoice(graph, path)
-                results.append({"invoice_path": str(path), "exit_code": code, **item})
-                status = "Passed" if code == 0 else "Failed"
-                print(f"[{index}/{len(paths)}] {status}: {path.name}", file=sys.stderr, flush=True)
-            failed = sum(item["exit_code"] != 0 for item in results)
-            output = {"results": results, "summary": {
-                "total": len(results), "passed": len(results) - failed, "failed": failed,
-            }}
-            exit_code = 1 if failed else 0
+            output = process_folder(graph, paths, args.workers)
+            exit_code = 1 if output["summary"]["failed"] else 0
     print(json.dumps(output, indent=2))
     return exit_code
 

@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -26,7 +27,8 @@ class MainTests(unittest.TestCase):
         database = Path(directory.name) / "inventory.db"
         setup_inventory(database)
         with (
-            patch("sys.argv", ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path)]),
+            patch("sys.argv", ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path),
+                               "--workers", "1"]),
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
@@ -190,3 +192,24 @@ class MainTests(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
             main.main()
         self.assertEqual(raised.exception.code, 2)
+
+    def test_folder_workers_overlap_and_keep_results_ordered(self):
+        barrier = Barrier(2, timeout=5)
+
+        def process(graph, path):
+            barrier.wait()  # Both jobs must start before either can finish.
+            return {"invoice": {"vendor": path.stem}}, 0
+
+        with patch("main.process_invoice", side_effect=process), contextlib.redirect_stderr(io.StringIO()):
+            result = main.process_folder(None, [Path("a.txt"), Path("b.txt")], workers=2)
+        self.assertEqual([item["invoice"]["vendor"] for item in result["results"]], ["a", "b"])
+        self.assertTrue(all(item["elapsed_seconds"] >= 0 for item in result["results"]))
+        self.assertEqual(result["summary"]["passed"], 2)
+
+    def test_nonpositive_workers_are_rejected(self):
+        for workers in ("0", "-1"):
+            with self.subTest(workers=workers), patch("sys.argv", [
+                "main.py", "--invoice_dir", ".", "--workers", workers,
+            ]), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                main.main()
+            self.assertEqual(raised.exception.code, 2)

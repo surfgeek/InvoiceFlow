@@ -143,23 +143,27 @@ a folder, in case-insensitive filename order:
 .venv\Scripts\python main.py --invoice_dir=data/invoices > batch-results.json
 ```
 
-Files run sequentially through the same graph, each with a fresh processing record.
+Files run through the same graph with four concurrent workers by default, each
+with a fresh processing record. Use `--workers 1` for sequential execution or set
+`--workers` to another positive count. Completion messages may arrive out of order;
+the JSON results remain in filename order.
 Subfolders are not traversed. Unsupported formats and processing failures appear
 as per-file errors, and subsequent files continue. Inventory validation remains
 read-only; files do not consume stock or affect one another.
 
 Batch JSON contains `results` and `summary`. Each result includes `invoice_path`,
-`exit_code`, and the same invoice, validation, or error/history fields as a single
+`exit_code`, `elapsed_seconds`, and the same invoice, validation, or error/history fields as a single
 run. The summary reports `total`, `passed`, and `failed`. Exit code 0 means every
 file passed the implemented checks; exit code 1 means at least one failed.
 An empty, missing, or unreadable folder is reported to stderr with exit code 1
 before any API calls. The two input options are mutually exclusive.
 
 Progress messages such as `[1/20] Processing invoice_1001.txt...` and its pass/fail
-result go to stderr immediately, so they remain visible when stdout is redirected.
+result with elapsed seconds go to stderr immediately, so they remain visible when stdout is redirected.
 The complete JSON is written only when the batch finishes; a redirected results
 file can remain empty until then. Each file can require two to four sequential
-model calls, so a folder run may take several minutes.
+model calls. Independent files overlap, but provider latency and rate limits
+still affect total runtime. Concurrency does not reduce the number of paid calls.
 
 Every readable invoice uses paid model calls. Different files containing the
 same invoice are processed separately, including the supplied PDF/text variants.

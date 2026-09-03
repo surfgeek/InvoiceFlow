@@ -2,15 +2,18 @@
 
 import json
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from threading import Barrier
 from unittest.mock import Mock, patch
 
 from grpc import RpcError
 
 from document_reader import DocumentReadError
 from extraction import ExtractionError
-from models import ProcessingRecord
+from models import Invoice, ProcessingRecord
+from source_review import SourceReview
 from validation import InventoryValidationError
 from workflow import build_workflow
 
@@ -173,3 +176,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(second["record"].reviews[0].invoice.items[0].quantity, 10)
         self.assertEqual(self.record.reviews, [])
         self.assertEqual(self.record.events, [])
+
+    def test_concurrent_graph_runs_keep_invoice_state_separate(self):
+        barrier = Barrier(2, timeout=5)
+        graph = build_workflow(self.client)
+
+        def extract(text, client, model):
+            barrier.wait()
+            return Invoice(vendor=text)
+
+        with patch("workflow.read_document", side_effect=str), patch(
+            "workflow.extract_invoice", side_effect=extract
+        ), patch("workflow.review_invoice", return_value=SourceReview(findings=[])), patch(
+            "workflow.validate_invoice", return_value=[]
+        ), ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(graph.invoke, {
+                "invoice_path": name, "record": ProcessingRecord(received_at=datetime.now(timezone.utc)),
+            }) for name in ("first.txt", "second.txt")]
+            results = [future.result() for future in futures]
+        self.assertEqual([result["record"].reviews[0].invoice.vendor for result in results],
+                         ["first.txt", "second.txt"])
+        self.assertTrue(all(len(result["record"].reviews) == 1 for result in results))
