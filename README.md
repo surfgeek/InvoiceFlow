@@ -12,7 +12,10 @@ their purpose, implementation status, and limits.
 Inventory database setup and a minimal LangGraph verification example are implemented.
 Invoice and processing metadata models are defined in `models.py`.
 Document text reading is implemented in `document_reader.py`.
-LangGraph is the selected orchestration framework. Invoice processing is not yet implemented.
+Grok extraction is implemented in `extraction.py`, with a CLI in `main.py`.
+LangGraph is the selected orchestration framework. The extraction CLI is not yet
+connected to a graph; business validation, approval, payment, self-correction,
+and runtime processing events are not yet implemented.
 
 ## Python environment and LangGraph example
 
@@ -78,7 +81,42 @@ implemented: text inside images is not read, including images within otherwise
 readable PDFs. The three supplied PDFs contain extractable text.
 
 The original assessment fixtures are included in `data/invoices`; see
-`data/README.md` for their source revision. Grok integration is not yet implemented.
+`data/README.md` for their source revision.
+
+## Extract an invoice with Grok
+
+Set `XAI_API_KEY` in the environment or in a local `.env` file beside `main.py`:
+
+```dotenv
+XAI_API_KEY=your-api-key
+XAI_MODEL=grok-4.6
+```
+
+The `.env` file is excluded from Git. Existing environment variables take
+precedence over the file. `XAI_MODEL` is optional and defaults to `grok-4.6`.
+Run:
+
+```powershell
+.venv\Scripts\python main.py --invoice_path=data/invoices/invoice_1001.txt
+```
+
+This command sends the document text to the xAI API and consumes API credits.
+It requires internet access and a funded API key. External inventory, approval,
+and payment services are not called. The reader supplies text for every supported
+format; Grok extracts and normalizes the fields using a JSON schema generated
+from `Invoice`. Decimal fields are requested as strings to preserve precision.
+Pydantic validates the returned data locally before it is printed as JSON.
+
+The command currently makes one extraction request, with a 60-second timeout
+and a 2,048-token output limit. Incomplete output is rejected. Errors go to stderr
+with exit code 1; successful extraction exits with code 0. Success means the
+output passed structural checks, not that the invoice is correct or approved.
+There is no automatic correction or retry loop yet.
+
+A live check of `invoice_1001.txt` returned Widgets Inc., amount `5000.00`,
+WidgetA quantity `10`, WidgetB quantity `5`, and due date `2026-02-01`, matching
+the source. Currency remained null because `$` alone is ambiguous. This is a
+single integration check, not evidence of accuracy across the fixture set.
 
 ### Additional file formats
 
@@ -131,6 +169,10 @@ Document reader tests cover all 20 supplied files, source text preservation,
 multiple PDF pages, and unreadable or unsupported inputs.
 Plugin tests cover discovery, restart behavior, extension conflicts, invalid
 definitions, dependency failures, reader errors, and execution in a fresh process.
+Extraction tests mock the xAI boundary and cover precise decimals, missing fields,
+malformed and incomplete output, and provider failures. CLI integration tests use
+the real document reader with mocked Grok responses. The automated suite makes
+no paid model calls and does not load a real API key.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 
