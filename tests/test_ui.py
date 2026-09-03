@@ -46,7 +46,7 @@ class UiTests(unittest.TestCase):
         self.assertEqual(result["mode"], "offline")
         self.assertEqual(result["completed"], 1)
         self.assertEqual(result["results"][0]["outcome"], "simulated_paid")
-        self.assertIn("Offline mode activated", result["notices"][0])
+        self.assertEqual(result["notices"], [])
         self.assertTrue(Path(result["report_path"]).is_file())
 
     def test_api_failure_retries_offline_and_continues(self):

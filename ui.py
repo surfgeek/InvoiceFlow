@@ -79,7 +79,6 @@ def run_invoices(run_id: str, directory: Path) -> None:
         if not api_key:
             fallback_active.set()
             update_run(run_id, mode="offline")
-            add_notice(run_id, "Offline mode activated: no xAI API key was found. Continuing with bundled fixtures.")
 
         with log_run(ROOT / "logs") as (_, log_path), ExitStack() as stack:
             update_run(run_id, log_path=str(log_path))
