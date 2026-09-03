@@ -22,24 +22,24 @@ Alternatively, open the [InvoiceFlow repository](https://github.com/surfgeek/Inv
 select **Code → Download ZIP**, extract the ZIP, and open a Bash terminal in the
 extracted `InvoiceFlow-main` folder.
 
-**Create the Python environment while connected to the internet:**
+**Set up InvoiceFlow while connected to the internet:**
 
 ```bash
-python -m venv .venv
+python bootstrap.py
+```
+
+This one command verifies Python 3.12, creates or repairs `.venv`, installs the
+pinned dependencies, and initializes both databases. It prints progress while
+Windows creates the environment. When it reports completion, activate it:
+
+```bash
 source .venv/Scripts/activate
-python -m pip install -r requirements.txt
 ```
 
-Run all remaining commands from this repository folder with the virtual environment
-active. On macOS/Linux, activate it with `source .venv/bin/activate` instead.
+On macOS/Linux, use `source .venv/bin/activate`. Run all remaining commands from
+the repository folder with this environment active.
 
-**Create the required database before running the app:**
-
-```bash
-python setup_inventory.py
-```
-
-This single setup command initializes inventory stock (WidgetA 15, WidgetB 10,
+Setup initializes inventory stock (WidgetA 15, WidgetB 10,
 GadgetX 5, FakeItem 0) and payment ledgers in `inventory.db` and `offline.db`.
 Both belong to the same application; separate histories keep offline demo payments
 out of live runs. SQLite is included with Python. Rerunning setup preserves records.
@@ -101,7 +101,7 @@ Exit code 0 means every invoice was paid in simulation or already recorded;
 
 | If you see… | What to do |
 | --- | --- |
-| Missing database/schema | Run `python setup_inventory.py` to initialize both databases. |
+| Missing database/schema | Run `python bootstrap.py` to complete setup. |
 | Missing API key | Set `XAI_API_KEY` in `.env`, or use `--offline`. |
 | No offline fixture | Use an unchanged bundled invoice or remove `--offline` for live extraction. |
 | Report filename rejected | Choose a new `.html` filename in an existing directory outside the input folder. |
