@@ -10,11 +10,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from xai_sdk import Client
 
-from document_reader import DocumentReadError, read_document
-from extraction import DEFAULT_MODEL, ExtractionError
-from models import ProcessingEvent, ProcessingRecord
-from source_review import extract_and_review
-from validation import InventoryValidationError, validate_invoice
+from extraction import DEFAULT_MODEL
+from models import ProcessingRecord
+from workflow import build_workflow
 
 
 def main() -> int:
@@ -30,31 +28,20 @@ def main() -> int:
         return 1
 
     record = ProcessingRecord(received_at=datetime.now(timezone.utc))
-    stage = "ingestion"
-    record.events.append(ProcessingEvent(stage=stage, status="started", timestamp=datetime.now(timezone.utc)))
-    try:
-        text = read_document(args.invoice_path)
-        with Client(api_key=api_key, timeout=60) as client:
-            invoice = extract_and_review(text, client, record, os.getenv("XAI_MODEL") or DEFAULT_MODEL)
-        record.events.append(ProcessingEvent(stage=stage, status="completed", timestamp=datetime.now(timezone.utc)))
-        stage = "validation"
-        record.events.append(ProcessingEvent(stage=stage, status="started", timestamp=datetime.now(timezone.utc)))
-        issues = validate_invoice(invoice)
-    except (DocumentReadError, ExtractionError, InventoryValidationError) as error:
-        print(str(error), file=sys.stderr)
-        record.events.append(ProcessingEvent(
-            stage=stage, status="failed", timestamp=datetime.now(timezone.utc), reason=str(error),
-        ))
-        print(json.dumps({"processing": record.model_dump(mode="json"), "error": str(error)}, indent=2))
-        return 1
+    with Client(api_key=api_key, timeout=60) as client:
+        graph = build_workflow(client, os.getenv("XAI_MODEL") or DEFAULT_MODEL)
+        result = graph.invoke({"invoice_path": args.invoice_path, "record": record})
 
-    record.events.append(ProcessingEvent(
-        stage=stage, status="failed" if issues else "completed",
-        timestamp=datetime.now(timezone.utc), reason="; ".join(issues) if issues else None,
-    ))
-    print(json.dumps({"invoice": invoice.model_dump(mode="json"), "validation_issues": issues,
-                      "processing": record.model_dump(mode="json")}, indent=2))
-    return 1 if issues else 0
+    output = {"processing": result["record"].model_dump(mode="json")}
+    if result.get("error"):
+        output["error"] = result["error"]
+        print(result["error"], file=sys.stderr)
+    else:
+        output["invoice"] = result["invoice"].model_dump(mode="json")
+        output["validation_issues"] = result["validation_issues"]
+    print(json.dumps(output, indent=2))
+    return 1 if result.get("error") or result.get("validation_issues") else 0
+
 
 
 if __name__ == "__main__":

@@ -9,17 +9,12 @@ their purpose, implementation status, and limits.
 
 ## Project status
 
-Inventory database setup and a minimal LangGraph verification example are implemented.
-Invoice and processing metadata models are defined in `models.py`.
-Document text reading is implemented in `document_reader.py`.
-Grok extraction is implemented in `extraction.py`, with a CLI in `main.py`.
-LangGraph is the selected orchestration framework. The extraction CLI is not yet
-connected to a graph. Required-field and SQLite inventory checks are implemented
-in `validation.py`. Source review and one correction attempt are implemented in
-`source_review.py`, with review history and UTC ingestion/validation events in
-CLI output. Approval, payment, and graph orchestration remain pending.
+Inventory setup, document readers, Grok extraction and source review, bounded
+correction, and SQLite validation are implemented. `main.py` invokes the LangGraph
+workflow in `workflow.py`. Processing output retains review history and UTC events.
+Approval, payment, and model tool calling remain pending.
 
-## Python environment and LangGraph example
+## Python environment
 
 From the repository root, create an isolated environment and install dependencies
 (verified with Python 3.12):
@@ -27,25 +22,36 @@ From the repository root, create an isolated environment and install dependencie
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python graph_example.py
 ```
 
 On macOS/Linux, use `.venv/bin/python` in place of `.venv\Scripts\python`.
 The `.venv` directory stays local and is excluded from Git. `requirements.txt`
 pins direct dependencies; their transitive dependencies are resolved by pip.
-Installation requires internet; the example runs locally without an API key or model call.
+Installation requires internet access. Automated tests run without an API key.
 
-Expected output:
+## Workflow
 
-```text
-Input: {'message': 'Hello, InvoiceFlow'}
-Output: {'message': 'Received: Hello, InvoiceFlow'}
+`workflow.py` defines separate read, extract, review, correct, and validate nodes.
+The CLI supplies the invoice path and a fresh processing record. Nodes return
+updates to the shared state; conditional edges select the next operation.
+
+```mermaid
+flowchart TD
+    Start --> Read --> Extract --> Review
+    Review -->|No findings| Validate --> Stop
+    Review -->|Findings on first review| Correct --> Review
+    Review -->|Findings after correction| Stop
 ```
 
-The graph follows `START -> acknowledge -> END`. Its state is a dictionary
-containing a message; the node returns an updated message. `TypedDict` describes
-the dictionary shape for type checking, not runtime data validation.
-This example demonstrates orchestration only, not an AI agent or invoice processing.
+An expected failure at any node records its reason and ends the graph. Correction
+runs at most once: the second review either permits validation or stops processing.
+Validation issues also end processing with a nonzero CLI exit status. No approval
+or payment node exists yet.
+
+Each node copies the processing record before updating it, preserving earlier
+snapshots and avoiding shared history between invocations. The API client remains
+outside graph state and is closed by the CLI. The graph runs locally without
+checkpointing or automatic retries; history remains part of the JSON output.
 
 ## Set up the inventory database
 
@@ -234,10 +240,12 @@ Validation tests cover required fields, repeated items, stock boundaries, exact
 quantity aggregation, unknown currency, unchanged stock, and database failures.
 The automated suite makes
 no paid model calls and does not load a real API key.
-Source-review tests cover clean reviews, bounded correction, original snapshots,
+Graph tests cover clean reviews, bounded correction, original snapshots,
 retained findings, uncertain source data, malformed/incomplete reviews, and API
 failures during correction or re-review. CLI integration tests verify that
 unresolved review skips inventory validation and emits the retained history.
+Route tests cover read, extraction, review, correction, and inventory failures,
+plus repeated graph invocations without shared history.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 

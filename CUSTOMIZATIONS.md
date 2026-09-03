@@ -20,7 +20,8 @@ It does not replace the assessment or imply additional functionality is complete
   and inventory checks still run. The payment stage itself is not yet implemented.
 - Missing required fields, nonpositive amounts or quantities, unknown inventory
   items, and insufficient stock prevent progression to approval. Implemented as
-  reported issues and a nonzero CLI exit status; graph routing is pending.
+  reported issues and a nonzero CLI exit status. LangGraph stops after validation;
+  approval routing awaits implementation of the approval stage.
 - Repeated item lines are combined for stock comparison. Validation reads stock
   without changing it. No whole-unit quantity restriction is imposed.
 

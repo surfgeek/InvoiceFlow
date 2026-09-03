@@ -30,7 +30,7 @@ class MainTests(unittest.TestCase):
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
-            patch("main.validate_invoice", side_effect=lambda invoice: validate_invoice(invoice, database)) as validator,
+            patch("workflow.validate_invoice", side_effect=lambda invoice, database_path: validate_invoice(invoice, database)) as validator,
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
@@ -63,7 +63,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(output)["processing"]["events"][-1]["status"], "failed")
         self.assertTrue(error)
-        client.assert_not_called()
+        client.return_value.__enter__.return_value.chat.create.assert_not_called()
 
     def test_bad_model_output_is_a_cli_failure(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
