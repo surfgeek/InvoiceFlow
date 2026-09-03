@@ -9,6 +9,7 @@ from xai_sdk.chat import system, user
 
 from extraction import EXTRACTION_PROMPT, ExtractionError
 from models import Invoice
+from operational_logging import sample_logged
 
 
 class SourceDiscrepancy(BaseModel):
@@ -59,7 +60,7 @@ def review_invoice(text: str, invoice: Invoice, client: Client, model: str) -> S
         store_messages=False,
     )
     try:
-        response = chat.sample()
+        response = sample_logged(chat, model)
     except RpcError as error:
         raise ExtractionError("Source review request failed; no result accepted.") from error
     if response.finish_reason != "REASON_STOP":

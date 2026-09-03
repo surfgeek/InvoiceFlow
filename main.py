@@ -5,9 +5,11 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from langgraph.graph.state import CompiledStateGraph
@@ -15,12 +17,16 @@ from xai_sdk import Client
 
 from extraction import DEFAULT_MODEL
 from models import ProcessingRecord
+from operational_logging import current_run_id, log_event, log_run
 from workflow import build_workflow
 
 
 def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     """Run one document with fresh state and format its result for the CLI."""
-    record = ProcessingRecord(received_at=datetime.now(timezone.utc))
+    record = ProcessingRecord(received_at=datetime.now(timezone.utc),
+                              run_id=current_run_id(), invoice_id=str(uuid4()))
+    log_event("invoice_started", invoice_id=record.invoice_id, file_name=path.name)
+    started = monotonic()
     result = graph.invoke({"invoice_path": path, "record": record})
     output = {"processing": result["record"].model_dump(mode="json")}
     if result.get("error"):
@@ -30,6 +36,9 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
         output["invoice"] = result["invoice"].model_dump(mode="json")
         output["validation_issues"] = result["validation_issues"]
     exit_code = 1 if result.get("error") or result.get("validation_issues") else 0
+    log_event("invoice_finished", invoice_id=record.invoice_id, exit_code=exit_code,
+              duration_seconds=monotonic()-started,
+              validation_issue_count=len(result.get("validation_issues", [])))
     return output, exit_code
 
 
@@ -49,7 +58,8 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
     # per-invoice history. Stock validation only reads the database.
     results = {}
     with ThreadPoolExecutor(max_workers=min(workers, len(paths))) as executor:
-        pending = {executor.submit(run, index, path): index for index, path in enumerate(paths, start=1)}
+        pending = {executor.submit(copy_context().run, run, index, path): index
+                   for index, path in enumerate(paths, start=1)}
         for future in as_completed(pending):
             results[pending[future]] = future.result()
     ordered = [results[index] for index in sorted(results)]
@@ -66,6 +76,8 @@ def main() -> int:
     inputs.add_argument("--invoice_path", type=Path, help="Process one invoice file.")
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")
     parser.add_argument("--workers", type=int, default=4, help="Concurrent folder workers (default: 4).")
+    parser.add_argument("--log_dir", type=Path, default=Path(__file__).resolve().parent / "logs",
+                        help="Directory for per-run structured operational logs.")
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be at least 1")
@@ -89,14 +101,17 @@ def main() -> int:
         print("Set XAI_API_KEY in the environment or .env file.", file=sys.stderr)
         return 1
 
-    with Client(api_key=api_key, timeout=60) as client:
-        graph = build_workflow(client, os.getenv("XAI_MODEL") or DEFAULT_MODEL)
-        if args.invoice_dir is None:
-            output, exit_code = process_invoice(graph, paths[0])
-        else:
-            output = process_folder(graph, paths, args.workers)
-            exit_code = 1 if output["summary"]["failed"] else 0
-    print(json.dumps(output, indent=2))
+    with log_run(args.log_dir) as (_, log_path):
+        print(f"Operational log: {log_path}", file=sys.stderr, flush=True)
+        with Client(api_key=api_key, timeout=60) as client:
+            graph = build_workflow(client, os.getenv("XAI_MODEL") or DEFAULT_MODEL)
+            if args.invoice_dir is None:
+                output, exit_code = process_invoice(graph, paths[0])
+            else:
+                output = process_folder(graph, paths, args.workers)
+                exit_code = 1 if output["summary"]["failed"] else 0
+        log_event("run_result", exit_code=exit_code, file_count=len(paths))
+        print(json.dumps(output, indent=2))
     return exit_code
 
 

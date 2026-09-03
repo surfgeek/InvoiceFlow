@@ -9,6 +9,7 @@ from xai_sdk.chat import system, user
 from xai_sdk.proto import chat_pb2
 
 from models import Invoice
+from operational_logging import sample_logged
 
 
 DEFAULT_MODEL = "grok-4.6"
@@ -67,7 +68,7 @@ def extract_invoice(
         store_messages=False,
     )
     try:
-        response = chat.sample()
+        response = sample_logged(chat, model)
     except RpcError as error:
         raise ExtractionError("Grok request failed; check API access and connectivity.") from error
 

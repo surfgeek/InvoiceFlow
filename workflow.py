@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -12,6 +13,7 @@ from xai_sdk import Client
 from document_reader import DocumentReadError, read_document
 from extraction import DEFAULT_MODEL, ExtractionError, extract_invoice
 from models import Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
+from operational_logging import log_event, logging_context
 from setup_inventory import DATABASE_PATH
 from source_review import review_invoice
 from validation import InventoryValidationError, validate_invoice
@@ -42,11 +44,22 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
     """Preserve node history on expected failures without mutating earlier states."""
     def run(state: WorkflowState) -> WorkflowState:
         record = state["record"].model_copy(deep=True)
-        try:
-            update = node({**state, "record": record})
-        except (DocumentReadError, ExtractionError, InventoryValidationError) as error:
-            add_event(record, stage, "failed", str(error))
-            update = {"error": str(error)}
+        with logging_context(run_id=record.run_id, invoice_id=record.invoice_id, stage=node.__name__):
+            started = monotonic()
+            log_event("stage_started")
+            try:
+                update = node({**state, "record": record})
+            except (DocumentReadError, ExtractionError, InventoryValidationError) as error:
+                add_event(record, stage, "failed", str(error))
+                update = {"error": str(error)}
+                log_event("stage_failed", error_type=type(error).__name__, duration_seconds=monotonic()-started)
+            except Exception as error:
+                log_event("stage_failed", error_type=type(error).__name__, duration_seconds=monotonic()-started)
+                raise
+            else:
+                log_event("stage_completed", duration_seconds=monotonic()-started,
+                          validation_issue_count=len(update.get("validation_issues", [])),
+                          review_finding_count=len(record.reviews[-1].findings) if node.__name__ == "review" else None)
         return {**update, "record": record}
     return run
 

@@ -28,7 +28,7 @@ class MainTests(unittest.TestCase):
         setup_inventory(database)
         with (
             patch("sys.argv", ["main.py", "--invoice_dir" if folder else "--invoice_path", str(path),
-                               "--workers", "1"]),
+                               "--workers", "1", "--log_dir", str(Path(directory.name) / "logs")]),
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
@@ -55,7 +55,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output)["invoice"]["vendor"], "Widgets Inc.")
         self.assertEqual(json.loads(output)["validation_issues"], [])
-        self.assertEqual(error, "")
+        self.assertTrue(error.startswith("Operational log:"))
         client.return_value.__exit__.assert_called_once()
 
     def test_missing_key_does_not_call_api(self):
@@ -87,7 +87,7 @@ class MainTests(unittest.TestCase):
                               "items": [{"name": "WidgetA", "quantity": "10"}]})
         code, output, error, _ = self.run_cli(path, content=content)
         self.assertEqual(code, 1)
-        self.assertEqual(error, "")
+        self.assertTrue(error.startswith("Operational log:"))
         self.assertEqual(json.loads(output)["validation_issues"],
                          ["Currency is unknown; payment is blocked."])
 

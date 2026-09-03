@@ -176,6 +176,41 @@ same invoice are processed separately, including the supplied PDF/text variants.
 Save output outside the input folder so a later batch does not process its own
 results. Batch execution does not compare outputs to expected extraction answers.
 
+## Operational logging
+
+Each CLI run writes UTF-8 JSON lines to `logs/<run-id>.log` beside the application.
+The CLI prints the path to stderr at startup. Change the directory with
+`--log_dir`; each run uses a separate file. Log files are excluded from Git.
+
+Entries are flushed after each event and can be viewed while a batch is running:
+
+```powershell
+Get-Content .\logs\<run-id>.log -Wait
+```
+
+Replace `<run-id>` with the identifier printed at startup. Each invoice's result
+contains `processing.run_id` and `processing.invoice_id` for correlation. The
+invoice ID identifies this processing attempt, not a vendor invoice number.
+
+Logs record UTC timestamps, run and invoice identifiers, filenames, node stages,
+start/end events, durations, model name, reasoning effort, available prompt/output/
+reasoning token counts, and final API status on failures. Unknown token usage is
+null. Review findings and validation issues are counted without copying their
+contents. Operational errors include exception type and API status when available;
+raw exception text, credentials, prompts, responses, and invoice contents are omitted.
+Filenames are included and may themselves contain business information.
+
+Model-call entries describe logical SDK requests. The SDK can retry `UNAVAILABLE`
+transport failures internally; individual transport retry attempts are not exposed
+by this logging. No application retry loop is implemented. A model-call completion
+means a response arrived, not that its schema or invoice data passed validation.
+Check the stage and invoice outcome as well.
+
+Logs are separate from the processing history and do not replace saved results.
+Result JSON still goes to stdout at the end; progress and the log location go to
+stderr. Setup errors before processing starts remain stderr-only. Logs are kept
+locally without automatic retention or cleanup.
+
 ## Source review and correction history
 
 A separate Grok call compares extracted fields with the original reader text.
@@ -290,6 +325,8 @@ Route tests cover read, extraction, review, correction, and inventory failures,
 plus repeated graph invocations without shared history.
 Folder CLI tests cover ordering, continued processing after errors, isolated
 histories, summary counts, invalid/empty folders, and exclusion of subfolders.
+Logging tests cover flushed JSON entries, UTC timestamps, usage and timing fields,
+sanitized errors, handler cleanup, and correlation across concurrent graph runs.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
 

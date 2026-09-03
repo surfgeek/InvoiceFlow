@@ -36,6 +36,12 @@ invoice detection, and automatic comparison with expected answers are not implem
 
 ### Assessment and engineering scope
 
+Structured operational logs are implemented as per-run local JSON-lines files.
+They supplement the assessment's logging requirement with run/invoice correlation,
+per-node and model-call timings, reasoning effort, available token usage, and
+sanitized API failure status. Individual SDK transport retries are not observable;
+automatic log retention and persistent result storage remain unimplemented.
+
 - Grok, multi-agent orchestration, structured outputs, tool use, self-correction,
   SQLite validation, simulated approval, mock payment, and CLI results come from
   the assessment. They are not custom enhancements.
