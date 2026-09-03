@@ -9,11 +9,22 @@ Supported inputs: TXT, CSV, JSON, XML, Markdown, and text-based PDF. See the
 
 ## How to set up
 
-You need **Python 3.12** and Git. Install dependencies while connected to the internet:
+You need **Python 3.12**. Git is required only if you clone the repository.
+
+**Get the project with Git:**
 
 ```bash
 git clone https://github.com/surfgeek/InvoiceFlow.git
 cd InvoiceFlow
+```
+
+Alternatively, open the [InvoiceFlow repository](https://github.com/surfgeek/InvoiceFlow),
+select **Code → Download ZIP**, extract the ZIP, and open a Bash terminal in the
+extracted `InvoiceFlow-main` folder.
+
+**Create the Python environment while connected to the internet:**
+
+```bash
 python -m venv .venv
 source .venv/Scripts/activate
 python -m pip install -r requirements.txt
