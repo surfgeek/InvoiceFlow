@@ -49,7 +49,7 @@ class CurrencyPolicyTests(unittest.TestCase):
                 "workflow.extract_invoice", return_value=source
             ), patch("workflow.review_invoice", return_value=SourceReview(findings=[])) as reviewer, patch(
                 "workflow.validate_invoice", return_value=[]
-            ) as validator, patch("workflow.review_approval"):
+            ) as validator, patch("workflow.review_approval"), patch("workflow.lookup_payment", return_value=None):
                 graph = build_workflow(Mock(), dollar_policy=DollarPolicy(action=action, currency="USD"))
                 result = graph.invoke({"invoice_path": "invoice.txt",
                                        "record": ProcessingRecord(received_at=datetime.now(timezone.utc))})

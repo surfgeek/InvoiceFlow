@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from setup_inventory import setup_inventory
@@ -67,6 +68,19 @@ class InventorySetupTests(unittest.TestCase):
         # SQLite cannot open a directory as a database file.
         with self.assertRaises(sqlite3.OperationalError):
             setup_inventory(self.root)
+
+    def test_upgrade_adds_ledger_and_rerun_preserves_existing_rows(self):
+        with closing(sqlite3.connect(self.database_path)) as connection, connection:
+            connection.execute("CREATE TABLE inventory (item TEXT PRIMARY KEY, stock INTEGER)")
+            connection.execute("INSERT INTO inventory VALUES ('WidgetA', 7)")
+        setup_inventory(self.database_path)
+        with closing(sqlite3.connect(self.database_path)) as connection, connection:
+            connection.execute("INSERT INTO payments VALUES ('vendor', 'invoice', 'fingerprint', 'receipt')")
+        setup_inventory(self.database_path)
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            self.assertEqual(connection.execute("SELECT * FROM payments").fetchall(),
+                             [('vendor', 'invoice', 'fingerprint', 'receipt')])
+            self.assertEqual(connection.execute("SELECT stock FROM inventory WHERE item='WidgetA'").fetchone(), (7,))
 
     def test_cli_creates_database_beside_script(self) -> None:
         # Run a copy so the command cannot touch the developer's inventory.db.

@@ -15,13 +15,14 @@ from models import ApprovalDecision
 
 import main
 from setup_inventory import setup_inventory
+from workflow import build_workflow
 from validation import validate_invoice
 
 
 class MainTests(unittest.TestCase):
     def run_cli(self, path, key="test-key", content=None, responses=None, folder=False, config_text=None):
         if content is None:
-            content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
+            content = json.dumps({"invoice_number": "INV-TEST", "vendor": "Widgets Inc.", "amount": "5000",
                                   "currency": "USD", "due_date": "2026-02-01",
                                   "items": [{"name": "WidgetA", "quantity": "10"}]})
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -40,6 +41,8 @@ class MainTests(unittest.TestCase):
             patch.dict("os.environ", {"XAI_API_KEY": key}, clear=True),
             patch("main.load_dotenv"),
             patch("main.Client") as client,
+            patch("main.build_workflow", side_effect=lambda *args, **kwargs:
+                  build_workflow(*args, database_path=database, **kwargs)),
             patch("workflow.validate_invoice", side_effect=lambda invoice, database_path: validate_invoice(invoice, database)) as validator,
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
@@ -105,7 +108,7 @@ class MainTests(unittest.TestCase):
 
     def test_unknown_currency_is_reported_in_json(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
-        content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
+        content = json.dumps({"invoice_number": "INV-TEST", "vendor": "Widgets Inc.", "amount": "5000",
                               "due_date": "2026-02-01",
                               "items": [{"name": "WidgetA", "quantity": "10"}]})
         code, output, error, _ = self.run_cli(path, content=content)
@@ -130,7 +133,7 @@ class MainTests(unittest.TestCase):
 
     def test_corrected_invoice_is_used_for_inventory_validation(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
-        invoice = {"vendor": "Widgets Inc.", "amount": "5000", "currency": "USD",
+        invoice = {"invoice_number": "INV-TEST", "vendor": "Widgets Inc.", "amount": "5000", "currency": "USD",
                    "due_date": "2026-02-01", "items": [{"name": "WidgetA", "quantity": "1"}]}
         original = json.dumps(invoice)
         invoice["items"][0]["quantity"] = "10"
@@ -151,7 +154,7 @@ class MainTests(unittest.TestCase):
         (folder / "b.txt").write_text("Invoice B", encoding="utf-8")
         (folder / "nested").mkdir()
         (folder / "nested" / "extra.txt").write_text("Nested invoice", encoding="utf-8")
-        invoice = json.dumps({"vendor": "Example", "amount": "10", "currency": "USD",
+        invoice = json.dumps({"invoice_number": "INV-TEST", "vendor": "Example", "amount": "10", "currency": "USD",
                               "due_date": "2026-02-01", "items": [{"name": "WidgetA", "quantity": "1"}]})
         code, output, error, client = self.run_cli(
             folder, folder=True, responses=["not JSON", invoice, '{"findings":[]}'],
@@ -161,10 +164,11 @@ class MainTests(unittest.TestCase):
         self.assertEqual([Path(item["invoice_path"]).name for item in result["results"]],
                          ["a.unsupported", "b.txt", "c.txt"])
         self.assertEqual([item["exit_code"] for item in result["results"]], [1, 1, 0])
-        self.assertEqual(result["summary"], {"total": 3, "passed": 1, "failed": 2})
+        self.assertEqual(result["summary"], {"total": 3, "simulated_paid": 1, "processing_error": 2,
+                                            "pending_approval": 0, "rejected": 0, "validation_blocked": 0, "already_paid": 0, "payment_held": 0})
         self.assertIn("[1/3] Processing a.unsupported...", error)
-        self.assertIn("[1/3] Failed: a.unsupported", error)
-        self.assertIn("[3/3] Passed: c.txt", error)
+        self.assertIn("[1/3] Processing error: a.unsupported", error)
+        self.assertIn("[3/3] Simulated paid: c.txt", error)
         self.assertIn("a.unsupported", error)
         self.assertIn("b.txt", error)
         self.assertEqual(self.validation_calls, 1)
@@ -175,7 +179,7 @@ class MainTests(unittest.TestCase):
         folder = self.make_folder()
         for name in ("a.txt", "b.txt"):
             (folder / name).write_text("invoice", encoding="utf-8")
-        invoices = [json.dumps({"vendor": vendor, "amount": "10", "currency": "USD",
+        invoices = [json.dumps({"invoice_number": "INV-TEST", "vendor": vendor, "amount": "10", "currency": "USD",
                                "due_date": "2026-02-01",
                                "items": [{"name": "WidgetA", "quantity": "1"}]})
                     for vendor in ("First", "Second")]
@@ -185,8 +189,9 @@ class MainTests(unittest.TestCase):
         result = json.loads(output)
         self.assertEqual(code, 0)
         self.assertIn("[1/2] Processing a.txt...", error)
-        self.assertIn("[2/2] Passed: b.txt", error)
-        self.assertEqual(result["summary"], {"total": 2, "passed": 2, "failed": 0})
+        self.assertIn("[2/2] Simulated paid: b.txt", error)
+        self.assertEqual(result["summary"], {"total": 2, "simulated_paid": 2, "processing_error": 0,
+                                            "pending_approval": 0, "rejected": 0, "validation_blocked": 0, "already_paid": 0, "payment_held": 0})
         self.assertEqual([item["processing"]["reviews"][0]["invoice"]["vendor"]
                           for item in result["results"]], ["First", "Second"])
         self.assertTrue(all(len(item["processing"]["reviews"]) == 1 for item in result["results"]))
@@ -221,13 +226,13 @@ class MainTests(unittest.TestCase):
 
         def process(graph, path):
             barrier.wait()  # Both jobs must start before either can finish.
-            return {"invoice": {"vendor": path.stem}}, 0
+            return {"invoice": {"invoice_number": "INV-TEST", "vendor": path.stem}, "outcome": "simulated_paid"}, 0
 
         with patch("main.process_invoice", side_effect=process), contextlib.redirect_stderr(io.StringIO()):
             result = main.process_folder(None, [Path("a.txt"), Path("b.txt")], workers=2)
         self.assertEqual([item["invoice"]["vendor"] for item in result["results"]], ["a", "b"])
         self.assertTrue(all(item["elapsed_seconds"] >= 0 for item in result["results"]))
-        self.assertEqual(result["summary"]["passed"], 2)
+        self.assertEqual(result["summary"]["simulated_paid"], 2)
 
     def test_nonpositive_workers_are_rejected(self):
         for workers in ("0", "-1"):
@@ -235,11 +240,23 @@ class MainTests(unittest.TestCase):
                 "main.py", "--invoice_dir", ".", "--workers", workers,
             ]), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
                 main.main()
-            self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_folder_reports_each_business_outcome_separately(self):
+        outcomes = list(main.OUTCOME_LABELS)
+        responses = [({"outcome": outcome}, 0 if outcome in ("simulated_paid", "already_paid") else 1)
+                     for outcome in outcomes]
+        stderr = io.StringIO()
+        with patch("main.process_invoice", side_effect=responses), contextlib.redirect_stderr(stderr):
+            result = main.process_folder(None, [Path(f"{index}.txt") for index in range(len(outcomes))], workers=1)
+        self.assertEqual(result["summary"], {"total": len(outcomes), **{outcome: 1 for outcome in outcomes}})
+        self.assertEqual([item["outcome"] for item in result["results"]], outcomes)
+        for label in main.OUTCOME_LABELS.values():
+            self.assertIn(f"{label}:", stderr.getvalue())
 
     def test_configured_dollar_policy_controls_single_invoice_outcome(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"
-        content = json.dumps({"vendor": "Widgets Inc.", "amount": "5000",
+        content = json.dumps({"invoice_number": "INV-TEST", "vendor": "Widgets Inc.", "amount": "5000",
                               "currency_qualification": "unqualified_dollar", "due_date": "2026-02-01",
                               "items": [{"name": "WidgetA", "quantity": "10"}]})
         for action, expected_code in (("assume", 0), ("reject", 1)):

@@ -21,6 +21,35 @@ from operational_logging import current_run_id, log_event, log_run
 from workflow import build_workflow
 
 
+OUTCOME_LABELS = {
+    "simulated_paid": "Simulated paid", "pending_approval": "Pending approval",
+    "rejected": "Rejected", "validation_blocked": "Validation blocked",
+    "processing_error": "Processing error",
+    "already_paid": "Already paid", "payment_held": "Payment held for review",
+}
+
+
+def processing_outcome(result: dict) -> str:
+    """Classify the final state without confusing business decisions with errors."""
+    if result.get("error"):
+        return "processing_error"
+    if result.get("validation_issues"):
+        return "validation_blocked"
+    record = result["record"]
+    if record.payment_hold:
+        return "payment_held"
+    if record.payment is not None and record.payment.status == "already_paid":
+        return "already_paid"
+    if record.approval is not None:
+        if record.approval.status == "pending":
+            return "pending_approval"
+        if record.approval.status == "rejected":
+            return "rejected"
+        if record.approval.status == "approved" and record.payment is not None:
+            return "simulated_paid"
+    return "processing_error"
+
+
 def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     """Run one document with fresh state and format its result for the CLI."""
     record = ProcessingRecord(received_at=datetime.now(timezone.utc),
@@ -36,14 +65,11 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     if result.get("error"):
         output["error"] = result["error"]
         print(f"{path}: {result['error']}", file=sys.stderr)
-    approval = result["record"].approval
-    payment = result["record"].payment
-    exit_code = 1 if (result.get("error") or result.get("validation_issues")
-                      or approval is None or approval.status != "approved"
-                      or payment is None or payment.status != "simulated_paid") else 0
+    output["outcome"] = processing_outcome(result)
+    exit_code = 0 if output["outcome"] in ("simulated_paid", "already_paid") else 1
     log_event("invoice_finished", invoice_id=record.invoice_id, exit_code=exit_code,
               duration_seconds=monotonic()-started,
-              validation_issue_count=len(result.get("validation_issues", [])))
+              validation_issue_count=len(result.get("validation_issues", [])), outcome=output["outcome"])
     return output, exit_code
 
 
@@ -54,7 +80,7 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
         started = monotonic()
         item, code = process_invoice(graph, path)
         elapsed = round(monotonic() - started, 2)
-        status = "Passed" if code == 0 else "Failed"
+        status = OUTCOME_LABELS[item["outcome"]]
         print(f"[{index}/{len(paths)}] {status}: {path.name} ({elapsed:.2f}s)",
               file=sys.stderr, flush=True)
         return {"invoice_path": str(path), "exit_code": code, "elapsed_seconds": elapsed, **item}
@@ -68,10 +94,8 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
         for future in as_completed(pending):
             results[pending[future]] = future.result()
     ordered = [results[index] for index in sorted(results)]
-    failed = sum(item["exit_code"] != 0 for item in ordered)
-    return {"results": ordered, "summary": {
-        "total": len(ordered), "passed": len(ordered) - failed, "failed": failed,
-    }}
+    counts = {outcome: sum(item["outcome"] == outcome for item in ordered) for outcome in OUTCOME_LABELS}
+    return {"results": ordered, "summary": {"total": len(ordered), **counts}}
 
 
 def main() -> int:
@@ -124,7 +148,7 @@ def main() -> int:
                 output, exit_code = process_invoice(graph, paths[0])
             else:
                 output = process_folder(graph, paths, workers)
-                exit_code = 1 if output["summary"]["failed"] else 0
+                exit_code = 0 if (output["summary"]["simulated_paid"] + output["summary"]["already_paid"]) == len(paths) else 1
         log_event("run_result", exit_code=exit_code, file_count=len(paths))
         print(json.dumps(output, indent=2))
     return exit_code

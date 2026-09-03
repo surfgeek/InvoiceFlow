@@ -10,7 +10,8 @@ It does not replace the assessment or imply additional functionality is complete
 | Markdown reader | Provide an additional supported format and a concrete implementation of the plugin contract. | Implemented in `reader_plugins/markdown.py`. DOCX and PNG plugins are possible extensions, but are not implemented. |
 | Configurable currency policy | Preserve explicit currencies and allow Acme to define treatment of unqualified dollars. | `config.toml` selects `assume` with USD or `reject`. Qualification comes from extraction and source review; Python applies the policy afterward and records any assumption. Missing/conflicting currencies receive no fallback. The README defines the terms and configuration examples. No conversion or currency-specific rounding is implemented. |
 | UTC arrival and stage timestamps | Establish when a document entered the system and when processing started, completed, or failed. | The CLI records arrival and ingestion/validation/approval/payment events in `ProcessingRecord`, including UTC timestamps and reasons. Invoice due dates remain separate calendar dates. |
-| Retained source-review findings | Preserve errors discovered during source review, including those later corrected. | Each review records an attempt number, UTC timestamp, invoice snapshot, findings with source excerpts and explanations, and resolution status. Findings survive correction and subsequent processing failures in stdout JSON. No automatic durable storage is implemented. |
+| Retained source-review findings | Preserve errors discovered during source review, including those later corrected. | Each review records an attempt number, UTC timestamp, invoice snapshot, findings with source excerpts and explanations, and resolution status. Findings survive correction and subsequent processing failures in stdout JSON. Complete processing histories are not stored in the payment ledger. |
+| Persistent duplicate-payment guard | Prevent repeated copies from generating multiple simulated payments, including concurrent submissions. | Source-reviewed vendor and invoice number identify the invoice. SQLite retains the compared-field fingerprint and receipt. Exact matches reuse the receipt; changed fields or missing invoice numbers hold payment for review. No revision reconciliation or review inbox. |
 
 ## Scope distinctions
 
@@ -20,8 +21,9 @@ The CLI adds `--invoice_dir` alongside the assessment's single-file option.
 Files directly in the folder run with four concurrent workers by default
 (configurable with `--workers`) and independent processing histories. Results
 retain filename order and include elapsed time per file. Expected per-file failures do not stop the batch. Output
-contains per-file results and summary counts. Recursive discovery, duplicate
-invoice detection, and automatic comparison with expected answers are not implemented.
+contains per-file results and separate counts for simulated payment, pending approval,
+rejection, validation blocks, processing errors, already-paid copies, and payment holds.
+Recursive discovery and automatic comparison with expected answers are not implemented.
 
 ### Agreed validation policies
 
@@ -57,8 +59,23 @@ Only final approval routes to the local payment function. Python passes the
 validated vendor, exact Decimal amount, and currency without another model call.
 The function returns a `simulated_paid` receipt with a generated ID and UTC timestamp;
 it makes no banking calls and does not change inventory. Payment failures retain
-the approval history and produce a nonzero CLI exit code. No automatic payment
-retries, duplicate-payment prevention, or durable receipt storage are implemented.
+the approval history and produce a nonzero CLI exit code. A matching paid copy
+returns `already_paid` with the original receipt ID and timestamp.
+
+`setup_inventory.py` installs both inventory and payment tables and preserves
+existing records. Payment identity ignores case and repeated whitespace in vendor
+and invoice number, but preserves punctuation and leading zeros. It does not resolve
+vendor aliases. The fingerprint compares total, currency, due date, explicit revision,
+and item names/quantities; equivalent decimals and reordered lines match. It does not
+compare unextracted fields such as addresses or unit prices. Identity and matching
+depend on extraction and source review, so this is not a guarantee against all duplicates.
+
+A short SQLite write transaction repeats the duplicate check, creates the local
+receipt, and saves it atomically. This is suitable for the local mock, not a design
+for real bank transfers. A different version with the same identity is held after
+the first successful payment; revision priority and payment differences are not inferred.
+Deleting the database removes payment history. Prior log-only receipts are not imported.
+No automatic payment retries or durable storage of entire processing results is implemented.
 
 ### Assessment and engineering scope
 

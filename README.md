@@ -11,8 +11,24 @@ You need Python 3.12 and an xAI API key with credits. From the repository folder
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+**Install the required database schema and seed inventory before running the app:**
+
+```powershell
 .\.venv\Scripts\python setup_inventory.py
 ```
+
+Python includes SQLite; no separate database server is needed. This command creates
+`inventory.db` beside the script with:
+
+- `inventory`: validation stock—WidgetA 15, WidgetB 10, GadgetX 5, FakeItem 0.
+- `payments`: saved simulated receipts and invoice identities for duplicate checks.
+
+Run the same command after upgrading an existing installation to add the payment
+table. It preserves existing stock and payment records. The app requires these
+tables; copying the code alone is not enough. Earlier receipts in log files are
+not imported into the new ledger.
 
 Create a `.env` file beside `main.py`:
 
@@ -20,8 +36,8 @@ Create a `.env` file beside `main.py`:
 XAI_API_KEY=your-api-key
 ```
 
-The key and generated inventory database are excluded from Git. Running inventory
-setup again preserves existing stock values.
+The key and generated database are excluded from Git. Keep `inventory.db` between
+runs to retain duplicate-payment protection.
 
 Commands below use Windows paths. On macOS/Linux, use `.venv/bin/python` instead
 of `.\.venv\Scripts\python`.
@@ -49,8 +65,17 @@ are written when the run finishes. Results include extracted data, validation
 issues, source-review history, and approval decisions in `processing.approval`.
 Simulated receipts appear in `processing.payment`, with the vendor, exact amount,
 currency, payment ID, and UTC timestamp. Exit code **0** means simulated payment
-completed; **1** means failed, blocked, rejected, or pending. Folder summaries count
-every result without a successful simulated payment under `failed`.
+completed or was already recorded; **1** means failed, blocked, rejected, pending,
+or held for review. Each result has an
+`outcome`: `simulated_paid`, `pending_approval`, `rejected`, `validation_blocked`,
+`processing_error`, `already_paid`, or `payment_held`. Folder summaries count each outcome separately.
+
+Duplicate checks use the source-reviewed vendor and invoice number. A matching
+paid invoice reuses its original receipt without another payment. Changed details
+under that identity, or a missing invoice number, hold payment for review; the
+reason appears in `processing.payment_hold`. There is no review inbox or automatic
+revision reconciliation. If original and revised copies arrive together, the first
+successful payment is recorded and a differing copy is held.
 
 Each run also writes a structured log under `logs/` and prints its path. Logs
 include stage timings, model usage, and errors, linked to results by run/invoice IDs.
@@ -117,8 +142,8 @@ USD defaults to 10,000. To support another currency, add its limit under
 `[approval.limits]`, for example `EUR = "8000"`. No conversion occurs; a currency
 without a configured limit stays pending. Pending results do not wait or resume
 automatically; update configuration and rerun to exercise a different mock response.
-Each successful rerun produces a new simulated receipt. Duplicate-payment prevention
-and durable payment storage are not implemented.
+Already-paid copies skip approval after validation. Payment receipts persist in
+SQLite; complete processing histories still appear in the CLI results and logs.
 
 Optional command-line overrides:
 

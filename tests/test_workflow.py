@@ -24,6 +24,9 @@ class WorkflowTests(unittest.TestCase):
         approval = patch("workflow.review_approval")
         approval.start()
         self.addCleanup(approval.stop)
+        ledger = patch("workflow.lookup_payment", return_value=None)
+        ledger.start()
+        self.addCleanup(ledger.stop)
         self.client = Mock()
         self.sample = self.client.chat.create.return_value.sample
         self.record = ProcessingRecord(received_at=datetime.now(timezone.utc))
@@ -63,7 +66,7 @@ class WorkflowTests(unittest.TestCase):
         self.responses(self.corrected, self.clean)
         self.run_review()
         self.assertEqual(self.sample.call_count, 2)
-        self.assertEqual(self.route, ["read", "extract", "review", "validate", "approve"])
+        self.assertEqual(self.route, ["read", "extract", "review", "validate", "check_payment", "approve"])
         self.assertEqual(self.record.reviews[0].outcome, "passed")
         self.assertEqual(self.record.reviews[0].timestamp.utcoffset().total_seconds(), 0)
         self.assertTrue(all(call.kwargs["reasoning_effort"] == "low"
