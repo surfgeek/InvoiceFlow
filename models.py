@@ -134,9 +134,11 @@ class ProcessingRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     received_at: AwareDatetime
+    mode: Literal["live", "offline"] = "live"
     run_id: str | None = None
     invoice_id: str | None = None
     currency_assumption: str | None = None
+    inventory_aliases: dict[str, str] = Field(default_factory=dict)
     events: list[ProcessingEvent] = Field(default_factory=list)
     reviews: list[ReviewAttempt] = Field(default_factory=list)
     approval: ApprovalRecord | None = None

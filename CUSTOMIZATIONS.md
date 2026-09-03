@@ -12,6 +12,8 @@ It does not replace the assessment or imply additional functionality is complete
 | UTC arrival and stage timestamps | Establish when a document entered the system and when processing started, completed, or failed. | The CLI records arrival and ingestion/validation/approval/payment events in `ProcessingRecord`, including UTC timestamps and reasons. Invoice due dates remain separate calendar dates. |
 | Retained source-review findings | Preserve errors discovered during source review, including those later corrected. | Each review records an attempt number, UTC timestamp, invoice snapshot, findings with source excerpts and explanations, and resolution status. Findings survive correction and subsequent processing failures in stdout JSON. Complete processing histories are not stored in the payment ledger. |
 | Persistent duplicate-payment guard | Prevent repeated copies from generating multiple simulated payments, including concurrent submissions. | Source-reviewed vendor and invoice number identify the invoice. SQLite retains the compared-field fingerprint and receipt. Exact matches reuse the receipt; changed fields or missing invoice numbers hold payment for review. No revision reconciliation or review inbox. |
+| Explicit inventory aliases | Handle known source-name variations without fuzzy matching. | Configured aliases apply to a validation copy only; original source fields and applied mappings remain in the result. Canonical and alias quantities aggregate together. Existing inventory names take precedence; missing targets fail. Payment fingerprints continue to compare the original reviewed item names conservatively. |
+| Standalone HTML results report | Make outcomes and their evidence readable without inspecting raw JSON. | `--report` exports counts, per-invoice reasons, matches, findings, approval details, receipts, and UTC history. All document content is HTML-escaped. No external assets, server, or interactive approval actions. |
 
 ## Scope distinctions
 
@@ -78,6 +80,16 @@ Deleting the database removes payment history. Prior log-only receipts are not i
 No automatic payment retries or durable storage of entire processing results is implemented.
 
 ### Assessment and engineering scope
+
+Offline mode addresses the assessment's local-runtime requirement alongside its
+Grok API requirement. `--offline` replaces model calls with explicit fixtures for
+unchanged bundled documents, including a scripted correction and a high-value
+authorization example. It runs the same graph, business rules, and payment code.
+It is not an offline LLM or a general-purpose parser. Unknown inputs fail clearly.
+Mode labels appear in results and terminal output; logs distinguish simulation
+calls from real model calls and omit fictitious token usage. `offline.db` is
+installed separately with `setup_inventory.py --offline`, keeping demo payments
+out of the live ledger. Model credentials are neither required nor read offline.
 
 Structured operational logs are implemented as per-run local JSON-lines files.
 They supplement the assessment's logging requirement with run/invoice correlation,

@@ -26,6 +26,10 @@ class BatchSettings(SettingsModel):
     workers: int = Field(default=4, ge=1)
 
 
+class InventorySettings(SettingsModel):
+    aliases: dict[Annotated[str, Field(min_length=1)], Annotated[str, Field(min_length=1)]] = Field(default_factory=dict)
+
+
 class DollarPolicy(SettingsModel):
     action: Literal["assume", "reject"] = "reject"
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
@@ -66,6 +70,7 @@ class AppSettings(SettingsModel):
     batch: BatchSettings = Field(default_factory=BatchSettings)
     currency: CurrencySettings = Field(default_factory=CurrencySettings)
     approval: ApprovalSettings = Field(default_factory=ApprovalSettings)
+    inventory: InventorySettings = Field(default_factory=InventorySettings)
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppSettings:

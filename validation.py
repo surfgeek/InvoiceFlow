@@ -6,11 +6,33 @@ from fractions import Fraction
 from pathlib import Path
 
 from models import Invoice
-from setup_inventory import DATABASE_PATH
+from setup_inventory import DATABASE_PATH, setup_command
 
 
 class InventoryValidationError(Exception):
     """Inventory could not be read, so validation could not complete."""
+
+
+def resolve_inventory_aliases(invoice: Invoice, database_path: str | Path,
+                              aliases: dict[str, str]) -> tuple[Invoice, dict[str, str]]:
+    """Map explicitly configured names for validation; exact inventory names win."""
+    matched = invoice.model_copy(deep=True)
+    used = {}
+    if not aliases:
+        return matched, used
+    try:
+        with closing(sqlite3.connect(Path(database_path).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
+            names = {row[0] for row in connection.execute("SELECT item FROM inventory")}
+    except sqlite3.Error as error:
+        raise InventoryValidationError(f"Inventory could not be read; run {setup_command(database_path)} and check the database.") from error
+    for item in matched.items or []:
+        if item.name not in names and item.name in aliases:
+            target = aliases[item.name]
+            if target not in names:
+                raise InventoryValidationError(f"Configured alias target is not in inventory: {target}.")
+            used[item.name] = target
+            item.name = target
+    return matched, used
 
 
 def validate_invoice(
@@ -63,7 +85,7 @@ def validate_invoice(
                     issues.append(f"Insufficient stock for {name}: {row[0]} available.")
     except sqlite3.Error as error:
         raise InventoryValidationError(
-            "Inventory could not be read; run setup_inventory.py and check the database."
+            f"Inventory could not be read; run {setup_command(database_path)} and check the database."
         ) from error
 
     return issues

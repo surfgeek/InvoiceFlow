@@ -22,6 +22,7 @@ dist/
 *.db-shm
 *.db-wal
 *.log
+logs/*.html
 
 # Operating system files
 .DS_Store

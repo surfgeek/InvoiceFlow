@@ -1,0 +1,606 @@
+{
+  "7308ab3d7ff26ee338e16ba304e762f0ac90403958d6211cfab36c94eb14dfd1": {
+    "source_files": [
+      "data/invoices/invoice_1001.txt"
+    ],
+    "invoice": {
+      "vendor": "Widgets Inc.",
+      "invoice_number": "INV-1001",
+      "revision": null,
+      "amount": "5000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "10"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "5"
+        }
+      ],
+      "due_date": "2026-02-01"
+    },
+    "initial_invoice": {
+      "vendor": "Widgets Inc.",
+      "invoice_number": "INV-1001",
+      "revision": null,
+      "amount": "5000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "9"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "5"
+        }
+      ],
+      "due_date": "2026-02-01"
+    },
+    "findings": [
+      {
+        "field": "items[0].quantity",
+        "extracted_value": "9",
+        "source_evidence": "WidgetA    qty: 10",
+        "explanation": "Scripted offline discrepancy: source quantity is 10, not 9.",
+        "unable_to_determine": false
+      }
+    ]
+  },
+  "c08f8f1d07aa17791fff4b7b25706b011ed230994b9f9058df75f9ef24f9dbd4": {
+    "source_files": [
+      "data/invoices/invoice_1002.txt"
+    ],
+    "invoice": {
+      "vendor": "Gadgets Co.",
+      "invoice_number": "1002",
+      "revision": null,
+      "amount": "15000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "GadgetX",
+          "quantity": "20"
+        }
+      ],
+      "due_date": "2026-01-30"
+    }
+  },
+  "7e71c764fee9d01f42417e8091b0ad26e8c5ce4a88231b545486fbd613967e09": {
+    "source_files": [
+      "data/invoices/invoice_1003.txt"
+    ],
+    "invoice": {
+      "vendor": "Fraudster LLC",
+      "invoice_number": "INV-1003",
+      "revision": null,
+      "amount": "100000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "FakeItem",
+          "quantity": "100"
+        }
+      ],
+      "due_date": null
+    }
+  },
+  "4cd1081738ded8532a7e5a36107723b26459b165bbf5b6c4bca89c437c13b351": {
+    "source_files": [
+      "data/invoices/invoice_1004.json"
+    ],
+    "invoice": {
+      "vendor": "Precision Parts Ltd.",
+      "invoice_number": "INV-1004",
+      "revision": null,
+      "amount": "1890.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "3"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "2"
+        }
+      ],
+      "due_date": "2026-02-22"
+    }
+  },
+  "4383b9318c589fd835fb247b43fd013c3eab3d0295c55dab72465e71893782d2": {
+    "source_files": [
+      "data/invoices/invoice_1004_revised.json"
+    ],
+    "invoice": {
+      "vendor": "Precision Parts Ltd.",
+      "invoice_number": "INV-1004",
+      "revision": "R1",
+      "amount": "5940.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "3"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "2"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "5"
+        }
+      ],
+      "due_date": "2026-02-22"
+    }
+  },
+  "ab99b9f5a37071378f0c824a63af4776ebafe37be1b04b3e97c4874ebd6a31ac": {
+    "source_files": [
+      "data/invoices/invoice_1005.json"
+    ],
+    "invoice": {
+      "vendor": "Global Supply Chain Partners",
+      "invoice_number": "INV-1005",
+      "revision": null,
+      "amount": "15225.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "14"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "8"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "10"
+        }
+      ],
+      "due_date": "2026-03-18"
+    }
+  },
+  "7f8177bebb8054253fd11f873b63272d36da4068a7c7043dce06143e3f5c35a2": {
+    "source_files": [
+      "data/invoices/invoice_1006.csv"
+    ],
+    "invoice": {
+      "vendor": "Acme Industrial Supplies",
+      "invoice_number": "INV-1006",
+      "revision": null,
+      "amount": "2750.00",
+      "currency": null,
+      "currency_qualification": "missing",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "5"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "3"
+        }
+      ],
+      "due_date": "2026-02-10"
+    }
+  },
+  "332b4c6464b59d5a286549ae8c0cc69f0eaec8f15665324a32c2a91839e8f2fe": {
+    "source_files": [
+      "data/invoices/invoice_1007.csv"
+    ],
+    "invoice": {
+      "vendor": "MegaWidgets Corp",
+      "invoice_number": "INV-1007",
+      "revision": null,
+      "amount": "15525.00",
+      "currency": null,
+      "currency_qualification": "missing",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "20"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "15"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "3"
+        }
+      ],
+      "due_date": "2026-02-28"
+    }
+  },
+  "a72eaf616b0f9fdba3266371bc21b77664ee5627511dd98c976329cb9c906a12": {
+    "source_files": [
+      "data/invoices/invoice_1008.txt"
+    ],
+    "invoice": {
+      "vendor": "NoProd Industries",
+      "invoice_number": "INV-1008",
+      "revision": null,
+      "amount": "9900.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "SuperGizmo",
+          "quantity": "12"
+        },
+        {
+          "name": "MegaSprocket",
+          "quantity": "6"
+        }
+      ],
+      "due_date": "2026-01-20"
+    }
+  },
+  "305a453ed46b0b54f681b58b4ac218cd93057dd4ee14e2110be61c1ce1a072a2": {
+    "source_files": [
+      "data/invoices/invoice_1009.json"
+    ],
+    "invoice": {
+      "vendor": null,
+      "invoice_number": "INV-1009",
+      "revision": null,
+      "amount": "-250.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "-5"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "2"
+        }
+      ],
+      "due_date": null
+    }
+  },
+  "99d9958bf530d30d0766c26a9b1f2ea4810b0da9399ab8da24ec47e764872871": {
+    "source_files": [
+      "data/invoices/invoice_1010.txt"
+    ],
+    "invoice": {
+      "vendor": "Consolidated Materials Group",
+      "invoice_number": "INV-1010",
+      "revision": null,
+      "amount": "7185.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "8"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "4"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "2"
+        },
+        {
+          "name": "WidgetA (rush order)",
+          "quantity": "4"
+        }
+      ],
+      "due_date": "2026-02-26"
+    }
+  },
+  "e648d639eb413ec4e5e622ea944679c4a36624d3b8b4064a0959362d8d6fdc94": {
+    "source_files": [
+      "data/invoices/invoice_1011.pdf"
+    ],
+    "invoice": {
+      "vendor": "Summit Manufacturing Co.",
+      "invoice_number": "INV-1011",
+      "revision": null,
+      "amount": "3000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "6"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "3"
+        }
+      ],
+      "due_date": "2026-02-20"
+    }
+  },
+  "fce3d019284fe8d5a1453caaf7903d0a7a1fecd00476ed256767575f03382de7": {
+    "source_files": [
+      "data/invoices/invoice_1011.txt"
+    ],
+    "invoice": {
+      "vendor": "Summit Manufacturing Co.",
+      "invoice_number": "INV-1011",
+      "revision": null,
+      "amount": "3000.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "6"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "3"
+        }
+      ],
+      "due_date": "2026-02-20"
+    }
+  },
+  "a87d47aae90741970e6a0ca02c1fbf2cb305e8dbd2e985d7101368b28c667b1d": {
+    "source_files": [
+      "data/invoices/invoice_1012.pdf"
+    ],
+    "invoice": {
+      "vendor": "QuickShip Distributers",
+      "invoice_number": "INV 1012",
+      "revision": null,
+      "amount": "9975.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "Widget A",
+          "quantity": "12"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "7"
+        },
+        {
+          "name": "Gadget X",
+          "quantity": "4"
+        }
+      ],
+      "due_date": "2026-02-25"
+    }
+  },
+  "e2a9e555b3bb5563fab5a408451586dc2d1c8e107780c9724ce9309ce96a15f7": {
+    "source_files": [
+      "data/invoices/invoice_1012.txt"
+    ],
+    "invoice": {
+      "vendor": "QuickShip Distributers",
+      "invoice_number": "INV 1012",
+      "revision": null,
+      "amount": "9975.00",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "Widget A",
+          "quantity": "12"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "7"
+        },
+        {
+          "name": "Gadget X",
+          "quantity": "4"
+        }
+      ],
+      "due_date": "2026-02-25"
+    }
+  },
+  "70b9e1fe4acf7316d5a0e0f0a0922c50ca4492241dd07c704e74c9dc7881d63b": {
+    "source_files": [
+      "data/invoices/invoice_1013.json"
+    ],
+    "invoice": {
+      "vendor": "Atlas Industrial Supply",
+      "invoice_number": "INV-1013",
+      "revision": null,
+      "amount": "22562.80",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "15"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "10"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "5"
+        },
+        {
+          "name": "WidgetA",
+          "quantity": "5"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "8"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "3"
+        },
+        {
+          "name": "WidgetA",
+          "quantity": "2"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "1"
+        }
+      ],
+      "due_date": "2026-03-24"
+    }
+  },
+  "a04324d9c8448e7a1b198a3baefbaaa05fa20120e509e62ad875067ed8d0ef85": {
+    "source_files": [
+      "data/invoices/invoice_1013.pdf"
+    ],
+    "invoice": {
+      "vendor": "Atlas Industrial Supply",
+      "invoice_number": "INV-1013",
+      "revision": null,
+      "amount": "22562.80",
+      "currency": null,
+      "currency_qualification": "unqualified_dollar",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "15"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "10"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "5"
+        },
+        {
+          "name": "WidgetA",
+          "quantity": "5"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "8"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "3"
+        },
+        {
+          "name": "WidgetA",
+          "quantity": "2"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "1"
+        }
+      ],
+      "due_date": "2026-03-24"
+    }
+  },
+  "dc80f570bac8007c1f360f0a927371ce1ac3813bc2b0b9758570fc738e48a18b": {
+    "source_files": [
+      "data/invoices/invoice_1014.xml"
+    ],
+    "invoice": {
+      "vendor": "TechParts International",
+      "invoice_number": "INV-1014",
+      "revision": null,
+      "amount": "4125.00",
+      "currency": "EUR",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "4"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "6"
+        }
+      ],
+      "due_date": "2026-02-26"
+    }
+  },
+  "6cbed47ed55eabedc5aab7d22c8a6e6f067baa5addb96969ab58fe118fcaf7e2": {
+    "source_files": [
+      "data/invoices/invoice_1015.csv"
+    ],
+    "invoice": {
+      "vendor": "Reliable Components Inc.",
+      "invoice_number": "INV-1015",
+      "revision": null,
+      "amount": "6500.00",
+      "currency": null,
+      "currency_qualification": "missing",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "10"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "5"
+        },
+        {
+          "name": "GadgetX",
+          "quantity": "2"
+        }
+      ],
+      "due_date": "2026-02-28"
+    }
+  },
+  "fa57af73e932b9a6900b9c7473efc2a8c584f525d9b8feee33052c72b3d0917c": {
+    "source_files": [
+      "data/invoices/invoice_1016.json"
+    ],
+    "invoice": {
+      "vendor": "Widgets Inc.",
+      "invoice_number": "INV-1016",
+      "revision": null,
+      "amount": "3233.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "4"
+        },
+        {
+          "name": "WidgetB",
+          "quantity": "2"
+        },
+        {
+          "name": "WidgetC",
+          "quantity": "3"
+        }
+      ],
+      "due_date": "2026-02-27"
+    }
+  },
+  "645daac94f2290b218239a006c30b5dfa15cb1c562d8a9273446e5a9bd8af619": {
+    "source_files": [
+      "data/offline_demo/high_value.txt"
+    ],
+    "invoice": {
+      "vendor": "Demo Manufacturing",
+      "invoice_number": "DEMO-HIGH-001",
+      "revision": null,
+      "amount": "12500.00",
+      "currency": "USD",
+      "currency_qualification": "explicit",
+      "items": [
+        {
+          "name": "WidgetA",
+          "quantity": "5"
+        }
+      ],
+      "due_date": "2026-10-01"
+    }
+  }
+}
