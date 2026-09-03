@@ -71,18 +71,21 @@ def sample_logged(chat, model: str, reasoning_effort: str = "low"):
     call_id = str(uuid4())
     started = monotonic()
     fields = {"call_id": call_id, "model": model, "reasoning_effort": reasoning_effort}
-    log_event("model_call_started", **fields)
+    prefix = "simulation_call" if getattr(chat, "is_offline", False) is True else "model_call"
+    log_event(f"{prefix}_started", **fields)
     try:
         response = chat.sample()
     except Exception as error:
         code = error.code().name if isinstance(error, RpcError) and callable(getattr(error, "code", None)) else None
-        log_event("model_call_failed", **fields, duration_seconds=monotonic()-started,
+        log_event(f"{prefix}_failed", **fields, duration_seconds=monotonic()-started,
                   error_type=type(error).__name__, api_status=code)
         raise
     usage = getattr(response, "usage", None)
     tokens = {name: value if isinstance(value, int) else None for name in (
         "prompt_tokens", "completion_tokens", "reasoning_tokens",
     ) for value in [getattr(usage, name, None)]}
-    log_event("model_call_completed", **fields, duration_seconds=monotonic()-started,
+    if prefix == "simulation_call":
+        tokens = {}  # Fixture replay has no token usage or billing.
+    log_event(f"{prefix}_completed", **fields, duration_seconds=monotonic()-started,
               finish_reason=response.finish_reason, **tokens)
     return response

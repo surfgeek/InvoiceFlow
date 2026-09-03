@@ -6,7 +6,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from models import Invoice
-from setup_inventory import DATABASE_PATH
+from setup_inventory import DATABASE_PATH, setup_command
 
 
 class InventoryValidationError(Exception):
@@ -63,7 +63,7 @@ def validate_invoice(
                     issues.append(f"Insufficient stock for {name}: {row[0]} available.")
     except sqlite3.Error as error:
         raise InventoryValidationError(
-            "Inventory could not be read; run setup_inventory.py and check the database."
+            f"Inventory could not be read; run {setup_command(database_path)} and check the database."
         ) from error
 
     return issues

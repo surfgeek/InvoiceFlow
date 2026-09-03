@@ -134,6 +134,7 @@ class ProcessingRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     received_at: AwareDatetime
+    mode: Literal["live", "offline"] = "live"
     run_id: str | None = None
     invoice_id: str | None = None
     currency_assumption: str | None = None

@@ -79,6 +79,7 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
                    approval_settings: ApprovalSettings | None = None):
     """Compile a sequential graph with at most one source-correction detour."""
     def read(state: WorkflowState) -> WorkflowState:
+        state["record"].mode = "offline" if getattr(client, "is_offline", False) is True else "live"
         add_event(state["record"], "ingestion", "started")
         return {"text": read_document(state["invoice_path"])}
 
