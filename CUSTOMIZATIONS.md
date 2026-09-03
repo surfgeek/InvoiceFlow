@@ -13,6 +13,18 @@ It does not replace the assessment or imply additional functionality is complete
 
 ## Scope distinctions
 
+### Agreed validation policies
+
+- Unknown currency blocks payment. Implemented as a validation issue; extraction
+  and inventory checks still run. The payment stage itself is not yet implemented.
+- Missing required fields, nonpositive amounts or quantities, unknown inventory
+  items, and insufficient stock prevent progression to approval. Implemented as
+  reported issues and a nonzero CLI exit status; graph routing is pending.
+- Repeated item lines are combined for stock comparison. Validation reads stock
+  without changing it. No whole-unit quantity restriction is imposed.
+
+### Assessment and engineering scope
+
 - Grok, multi-agent orchestration, structured outputs, tool use, self-correction,
   SQLite validation, simulated approval, mock payment, and CLI results come from
   the assessment. They are not custom enhancements.
