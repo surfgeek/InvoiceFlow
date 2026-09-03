@@ -155,6 +155,12 @@ file passed the implemented checks; exit code 1 means at least one failed.
 An empty, missing, or unreadable folder is reported to stderr with exit code 1
 before any API calls. The two input options are mutually exclusive.
 
+Progress messages such as `[1/20] Processing invoice_1001.txt...` and its pass/fail
+result go to stderr immediately, so they remain visible when stdout is redirected.
+The complete JSON is written only when the batch finishes; a redirected results
+file can remain empty until then. Each file can require two to four sequential
+model calls, so a folder run may take several minutes.
+
 Every readable invoice uses paid model calls. Different files containing the
 same invoice are processed separately, including the supplied PDF/text variants.
 Save output outside the input folder so a later batch does not process its own

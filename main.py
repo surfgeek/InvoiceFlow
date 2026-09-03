@@ -64,9 +64,12 @@ def main() -> int:
             output, exit_code = process_invoice(graph, paths[0])
         else:
             results = []
-            for path in paths:
+            for index, path in enumerate(paths, start=1):
+                print(f"[{index}/{len(paths)}] Processing {path.name}...", file=sys.stderr, flush=True)
                 item, code = process_invoice(graph, path)
                 results.append({"invoice_path": str(path), "exit_code": code, **item})
+                status = "Passed" if code == 0 else "Failed"
+                print(f"[{index}/{len(paths)}] {status}: {path.name}", file=sys.stderr, flush=True)
             failed = sum(item["exit_code"] != 0 for item in results)
             output = {"results": results, "summary": {
                 "total": len(results), "passed": len(results) - failed, "failed": failed,
