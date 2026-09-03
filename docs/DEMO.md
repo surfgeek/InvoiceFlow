@@ -1,99 +1,121 @@
-# InvoiceFlow demo
+# Using InvoiceFlow
 
-InvoiceFlow turns an invoice document into an explained payment decision. Grok
-extracts and reviews messy data; Python enforces stock, approval, and duplicate
-payment rules. Staff can see why an invoice stopped and which evidence was corrected.
+InvoiceFlow processes the supplied invoice folder and explains which documents
+can proceed to simulated payment, which need attention, and why. The supplied
+files intentionally include clean invoices, missing data, inventory problems,
+duplicate copies, and revisions. A useful run will therefore include several
+outcomes, not just successful payments.
 
-## Choose a mode
+## Start with the provided invoices
 
-| Mode | Purpose | Dependencies at runtime |
-| --- | --- | --- |
-| Live (default) | Demonstrate actual Grok extraction, tool calling, and critique. | xAI API access and credits; local SQLite. |
-| `--offline` | Demonstrate workflow behavior reproducibly with scripted model responses. | Installed Python dependencies and local SQLite only. |
+Complete the [README setup](../README.md#how-to-set-up) once. From the repository
+folder, run:
 
-The assessment requests Grok API integration and also locally simulated external
-APIs. Live mode demonstrates the integration; offline mode provides a fully local
-runtime. Approval and payment services are local mocks in both modes. Offline
-results are not evidence of model quality or live performance.
+```powershell
+.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=results.html > results.json
+```
 
-## A short walkthrough
+Open `results.html` in your browser. The terminal shows progress and outcome
+counts; the report gives each invoice's reason and expandable evidence. Detailed
+JSON is saved when the batch finishes. Use a new report filename on subsequent runs.
 
-Follow [README setup](../README.md#how-to-set-up), using `setup_inventory.py --offline`
-for the steps below. Run commands from the repository root. Outcomes assume a fresh
-offline payment ledger; repeat runs return `already_paid` for completed payments.
-Setup never resets the ledger.
+By default, Grok processes the documents through its API. The app does not choose
+an outcome from the filename. You can also point `--invoice_dir` at your own
+folder of supported invoices, or use `--invoice_path` for a single document.
+Validation still uses the configured local inventory and business rules.
 
-1. **Correction followed by payment:**
-   `python main.py --offline --invoice_path=data/invoices/invoice_1001.txt`
-   The scripted extraction reports quantity 9; review finds 10 in the source.
-   One correction succeeds. The result retains both snapshots and the finding.
-2. **Stop an invalid order:**
-   `python main.py --offline --invoice_path=data/invoices/invoice_1002.txt`
-   The request for 20 GadgetX exceeds stock of 5. No approval or payment occurs.
-3. **Require authorization:**
-   `python main.py --offline --invoice_path=data/offline_demo/high_value.txt`
-   USD 12,500 exceeds the USD 10,000 limit. The simulated model calls the VP tool;
-   its default response leaves the invoice pending. Set `approval.mock_vp.response`
-   to `approved` or `rejected` in configuration to exercise those outcomes. This
-   response comes from configuration, not from the model's recommendation.
-4. **Avoid duplicate payment:**
-   Run invoice 1011's `.pdf` and then `.txt` with the same command pattern.
-   The second copy returns the original receipt ID and timestamp.
-5. **Hold a revision:**
-   Run `invoice_1004.json`, then `invoice_1004_revised.json`.
-   The original is paid; changed details under the same identity require review.
+## What happens and why
 
-Remove `--offline` to use actual Grok on these or other supported documents.
-Both modes return structured JSON on stdout and progress/log locations on stderr.
-Add `--report=results.html` to open the results in any browser, including offline.
-The report lists outcomes and reasons, with expandable source findings, configured
-item matches, approval responses, payment receipts, and stage timestamps.
-The full folder includes deliberately blocked invoices, so exit code 1 is expected.
+1. **Read and extract.** A format-specific reader obtains document text. Grok
+   extracts the vendor, invoice identity, amount, currency, items, and due date.
+   This lets different layouts enter a common workflow.
+2. **Check the extraction.** A separate model call compares the extracted fields
+   with the source. If it finds discrepancies, one correction is allowed and
+   checked again. Unresolved discrepancies stop processing. The original findings
+   remain visible even when corrected; model review is not a guarantee of accuracy.
+3. **Validate the business data.** Python checks required values, item names, and
+   quantities against SQLite inventory. Configured aliases handle known naming
+   variations, and repeated quantities are combined. Currency assumptions are
+   applied only where configured. Invalid data cannot proceed to payment.
+4. **Check payment history.** After validation, an identical paid invoice reuses
+   its receipt. Changed details under the same vendor and invoice number, or a
+   missing invoice number, hold payment for review. This prevents duplicate copies
+   from generating another payment while avoiding guesses about revisions.
+5. **Apply approval policy.** Eligible invoices within their currency's limit can
+   be approved after recommendation and critique. Above the limit, the agent must
+   request a separate mock VP response. Python prevents the model from overriding
+   that authorization. Missing currency limits leave approval pending.
+6. **Record simulated payment.** Only final approval reaches the payment function.
+   It saves a receipt with the exact amount, currency, ID, and UTC timestamp.
+   A database transaction prevents concurrent copies from creating two payments.
+   No bank is contacted and no real funds move.
 
-## Reading the results
+## Understand the outcomes
 
-Each JSON result has an `outcome`: `simulated_paid`, `already_paid`,
-`validation_blocked`, `pending_approval`, `rejected`, `payment_held`, or
-`processing_error`. The HTML report explains these in plain language. Folder
-summaries count each outcome separately; result order follows filenames even
-though processing runs concurrently.
-
-`processing.approval` retains recommendations, critique findings, and any mock VP
-response. `processing.payment` holds the receipt, including exact amount, currency,
-ID, and UTC timestamp. Source-review snapshots and findings remain under
-`processing.reviews`; configured matches and currency assumptions are recorded
-alongside them. Logs carry run/invoice IDs for correlation with these results.
-
-Duplicate checks run after validation using source-reviewed vendor and invoice
-number. Matching paid copies reuse their original receipt. Changed details under
-the same identity, or missing invoice numbers, hold payment for review. The reason
-is in `processing.payment_hold`. Changing approval configuration does not resolve
-a revision conflict; there is no review inbox or automatic revision reconciliation.
-
-Database setup is safe to rerun when upgrading: it creates missing tables and
-preserves stock and payment rows. Receipts produced before the payment ledger
-existed remain in their log files and are not imported automatically.
-
-## What the implementation demonstrates
-
-| Evaluation area | Concrete evidence |
+| Outcome | Meaning |
 | --- | --- |
-| Functionality | All four stages are connected, with approved, rejected, pending, invalid, duplicate, and revision outcomes. |
-| Code quality | Validated configuration and structured models; Decimal amounts; SQLite transactions; tests for failures and concurrent duplicates. |
-| Agentic sophistication | Separate extraction, source-review, and approval calls; bounded correction and critique loops; a VP authorization tool. Live mode uses Grok; offline calls are scripted. |
-| Shipping mindset | Local CLI and mock services; bounded loops and concurrency. No bank integration, approval inbox, or revision reconciliation. |
-| Presentation | Reasons, source discrepancies, UTC events, and payment receipts explain each decision. Deterministic controls prevent model recommendations from bypassing authorization. |
-| Above/beyond | Reader plugins, configurable currency policy, concurrent batches, and persistent duplicate protection address concrete input and operational issues. |
-| UI/UX | One-file/folder commands, explicit mode labels, distinct outcome labels, actionable errors, and an optional browser-readable HTML report. No dashboard server is required. |
+| Simulated paid | All required checks and approval completed; a simulated receipt was saved. |
+| Already paid | A matching payment was recorded earlier; its receipt was reused. |
+| Validation blocked | Required data or inventory checks failed; the report lists the issues. |
+| Pending approval | Additional authorization is pending, or the currency has no configured approval limit. |
+| Rejected | The approval process returned a rejection; payment did not occur. |
+| Payment held for review | Invoice identity is missing or conflicts with a paid invoice. |
+| Processing error | Reading, model processing, database access, or another handled processing step failed. |
 
-## Limits to explain honestly
+Blocked and pending outcomes are expected in the supplied sample set. Exit code 1
+means at least one document did not complete payment or another run error occurred;
+it does not by itself mean the app malfunctioned. Exit code 0 means every document
+was paid in simulation or already recorded.
 
-- Inventory matching uses exact names plus explicit configured aliases, including
-  `Widget A` → `WidgetA`. Other variations remain unknown; no fuzzy matching is used.
-- Missing currencies remain blocked; currencies without an approval limit remain pending.
-- Duplicate matching depends on extracted vendor/number and compared fields. It
-  does not resolve vendor aliases or reconcile revisions. The first successful
-  payment wins when differing versions arrive concurrently.
-- Payment receipts persist, but full processing results are emitted at run completion.
-  There is no review inbox or automatic resumption of held invoices.
-- No financial savings or production reliability are claimed from a prototype run.
+Payment history survives restarts. Repeating a run can produce `already_paid`
+instead of new payments. With concurrent original/revised copies, the first
+successful payment is recorded and the differing version is held. Setup preserves
+history; it does not reset the demonstration.
+
+Expand an invoice in the report to see extracted items, applied aliases, source
+findings, approval reasons, receipts, and timestamps. JSON and logs provide
+run/invoice IDs for tracing a result. Held invoices have no approval inbox or
+automatic reconciliation; changing a VP response does not resolve a revision conflict.
+
+## If the API is unavailable
+
+There is one application installation. Live mode needs xAI access and credits.
+If the API request fails, the affected invoice stops with an error; the app does
+not silently replace live processing with simulated answers. Retry when access is
+restored, or explicitly run the local demo:
+
+```powershell
+.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
+```
+
+`--offline` replays scripted model responses for the unchanged supplied documents
+through the same readers, graph, validation, approval tool, and payment code. It
+includes a scripted correction so that path can be demonstrated without an API.
+It is not an offline LLM and cannot interpret new or edited invoices. Mode labels
+make the distinction visible in terminal output, reports, results, and logs.
+
+Offline payment records use a separate database so demo runs do not affect the
+live-mode ledger. This is data isolation, not a second installation. Business
+services—VP authorization and payment—are local mocks in both modes.
+
+## Scope and business value
+
+The prototype reduces repetitive extraction and checking while keeping payment
+controls in application code. Its report makes exceptions and their evidence
+visible instead of treating every stopped invoice as a technical failure.
+
+- **Functionality:** ingestion, validation, approval, and payment are connected.
+- **Code quality:** structured data, exact decimal amounts, transactional receipts,
+  bounded correction loops, operational logs, and automated failure/concurrency tests.
+- **Agentic behavior:** separate model roles, source correction, approval critique,
+  and a tool request for independent authorization. These are live Grok calls in
+  normal mode and explicitly scripted responses offline.
+- **Usability:** one-file or folder input, readable reports, distinct outcomes,
+  configurable policies, and modular readers.
+- **Deliberate limits:** no real banking, review inbox, fuzzy inventory matching,
+  vendor-alias resolution, or revision reconciliation. Full results are emitted at
+  batch completion; only payment receipts have database persistence.
+
+These are prototype capabilities, not claims of proven financial savings or
+production reliability. Configuration details are in the README; policy boundaries
+are recorded in [CUSTOMIZATIONS.md](../CUSTOMIZATIONS.md).

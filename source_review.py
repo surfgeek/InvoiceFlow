@@ -63,7 +63,8 @@ def review_invoice(text: str, invoice: Invoice, client: Client, model: str,
     try:
         response = sample_logged(chat, model, reasoning_effort)
     except RpcError as error:
-        raise ExtractionError("Source review request failed; no result accepted.") from error
+        raise ExtractionError("Grok API source review failed; no result accepted. Retry when API access "
+                              "is restored, or use --offline with the bundled invoices for a local demo.") from error
     if response.finish_reason != "REASON_STOP":
         raise ExtractionError("Source review did not finish; no result accepted.")
     try:

@@ -24,15 +24,15 @@ on macOS/Linux, replace `.\.venv\Scripts\python` with `.venv/bin/python`.
 **Create the required database before running the app:**
 
 ```powershell
-.\.venv\Scripts\python setup_inventory.py --offline
+.\.venv\Scripts\python setup_inventory.py
 ```
 
-This creates `offline.db` with inventory stock (WidgetA 15, WidgetB 10, GadgetX 5,
-FakeItem 0) and a payment ledger for duplicate checks. SQLite is included with
-Python; no database server is needed. Rerunning setup preserves existing records.
+This single setup command initializes inventory stock (WidgetA 15, WidgetB 10,
+GadgetX 5, FakeItem 0) and payment ledgers in `inventory.db` and `offline.db`.
+Both belong to the same application; separate histories keep offline demo payments
+out of live runs. SQLite is included with Python. Rerunning setup preserves records.
 
-**For live Grok**, also run `.\.venv\Scripts\python setup_inventory.py` to create
-`inventory.db`, then put an xAI API key with credits in `.env` beside `main.py`:
+**For normal processing with Grok**, put an xAI API key with credits in `.env` beside `main.py`:
 
 ```dotenv
 XAI_API_KEY=your-api-key
@@ -44,10 +44,10 @@ Keys, databases, and operational logs are excluded from Git.
 
 ## How to run from the command line
 
-**Start here: process the sample folder offline and create a readable report.**
+**Start here: process the provided invoices and create a readable report.**
 
 ```powershell
-.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=results.html > offline-results.json
+.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=results.html > results.json
 ```
 
 Open `results.html` in your browser. It shows outcomes, reasons, and expandable
@@ -64,11 +64,11 @@ Other examples:
 # One invoice, offline
 .\.venv\Scripts\python main.py --offline --invoice_path=data/invoices/invoice_1001.txt
 
-# Live Grok, with a report
-.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=live-results.html > live-results.json
+# Offline demo of the provided folder, with a report
+.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
 
-# Offline example requiring additional authorization
-.\.venv\Scripts\python main.py --offline --invoice_path=data/offline_demo/high_value.txt
+# Your own folder of supported invoices (live Grok)
+.\.venv\Scripts\python main.py --invoice_dir="C:/Invoices"
 
 # Automated tests; no API calls
 .\.venv\Scripts\python -m unittest discover -s tests -v
@@ -76,8 +76,11 @@ Other examples:
 
 Offline mode recognizes unchanged bundled invoice text, including renamed copies
 with supported formats. It does **not** perform LLM reasoning or parse new documents.
-Invoice 1001 includes a scripted mistake and correction. Use live mode for new or
-edited inputs. Results explicitly identify the mode.
+Use live mode for new or edited inputs. Results explicitly identify the mode.
+
+If a Grok API request fails, the affected invoice stops with an error and suggests
+`--offline` for a local demo of bundled invoices. The app never switches modes
+automatically. Retry live processing when API access is restored.
 
 Folder processing is concurrent and nonrecursive. Handled per-invoice failures
 do not stop the batch. Keep JSON and HTML output outside the input folder.
@@ -86,7 +89,7 @@ Exit code 0 means every invoice was paid in simulation or already recorded;
 
 | If you see… | What to do |
 | --- | --- |
-| Missing database/schema | Run the setup command above; include `--offline` for offline mode. |
+| Missing database/schema | Run `python setup_inventory.py` to initialize both databases. |
 | Missing API key | Set `XAI_API_KEY` in `.env`, or use `--offline`. |
 | No offline fixture | Use an unchanged bundled invoice or remove `--offline` for live extraction. |
 | Report filename rejected | Choose a new `.html` filename in an existing directory outside the input folder. |

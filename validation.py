@@ -6,7 +6,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from models import Invoice
-from setup_inventory import DATABASE_PATH, setup_command
+from setup_inventory import DATABASE_PATH
 
 
 class InventoryValidationError(Exception):
@@ -24,7 +24,7 @@ def resolve_inventory_aliases(invoice: Invoice, database_path: str | Path,
         with closing(sqlite3.connect(Path(database_path).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
             names = {row[0] for row in connection.execute("SELECT item FROM inventory")}
     except sqlite3.Error as error:
-        raise InventoryValidationError(f"Inventory could not be read; run {setup_command(database_path)} and check the database.") from error
+        raise InventoryValidationError("Inventory could not be read; run setup_inventory.py and check the database.") from error
     for item in matched.items or []:
         if item.name not in names and item.name in aliases:
             target = aliases[item.name]
@@ -85,7 +85,7 @@ def validate_invoice(
                     issues.append(f"Insufficient stock for {name}: {row[0]} available.")
     except sqlite3.Error as error:
         raise InventoryValidationError(
-            f"Inventory could not be read; run {setup_command(database_path)} and check the database."
+            "Inventory could not be read; run setup_inventory.py and check the database."
         ) from error
 
     return issues

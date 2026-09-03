@@ -69,6 +69,7 @@ class ExtractionTests(unittest.TestCase):
         with self.assertRaises(ExtractionError) as raised:
             extract_invoice("source", self.client)
         self.assertNotIn("private", str(raised.exception))
+        self.assertIn("--offline", str(raised.exception))
         self.sample.assert_called_once()
 
     def test_empty_source_does_not_call_provider(self):

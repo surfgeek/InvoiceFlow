@@ -101,6 +101,7 @@ class InventorySetupTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(self.database_path.is_file())
+        self.assertTrue((self.root / "offline.db").is_file())
         self.assertFalse((working_directory / "inventory.db").exists())
         self.assertIn(str(self.database_path), result.stdout)
         self.assertEqual(

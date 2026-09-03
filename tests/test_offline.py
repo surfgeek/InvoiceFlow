@@ -118,4 +118,4 @@ class OfflineTests(unittest.TestCase):
         self.database = self.root / "uninitialized" / "offline.db"
         code, result, _ = self.run_cli(ROOT / "data/invoices/invoice_1001.txt")
         self.assertEqual(code, 1)
-        self.assertIn("setup_inventory.py --offline", result["error"])
+        self.assertIn("setup_inventory.py", result["error"])

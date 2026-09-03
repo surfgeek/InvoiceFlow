@@ -11,7 +11,7 @@ import sqlite3
 from uuid import uuid4
 
 from models import ApprovalRecord, Invoice, PaymentReceipt
-from setup_inventory import DATABASE_PATH, setup_command
+from setup_inventory import DATABASE_PATH
 
 
 class PaymentError(Exception):
@@ -66,7 +66,7 @@ def lookup_payment(invoice: Invoice, database_path: str | Path = DATABASE_PATH) 
         with closing(sqlite3.connect(Path(database_path).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
             return stored_payment(connection, identity)
     except sqlite3.Error as error:
-        raise PaymentError(f"Payment ledger could not be read; run {setup_command(database_path)} and check the database.") from error
+        raise PaymentError("Payment ledger could not be read; run setup_inventory.py and check the database.") from error
 
 
 def mock_payment(vendor: str, amount: Decimal, currency: str) -> PaymentReceipt:
@@ -96,4 +96,4 @@ def pay_invoice(invoice: Invoice, approval: ApprovalRecord | None,
                 connection.execute("INSERT INTO payments VALUES (?, ?, ?, ?)", (*identity, receipt.model_dump_json()))
                 return receipt
     except sqlite3.Error as error:
-        raise PaymentError(f"Payment ledger could not be updated; run {setup_command(database_path)} and check the database.") from error
+        raise PaymentError("Payment ledger could not be updated; run setup_inventory.py and check the database.") from error

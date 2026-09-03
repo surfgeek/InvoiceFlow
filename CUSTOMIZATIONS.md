@@ -87,9 +87,8 @@ unchanged bundled documents, including a scripted correction and a high-value
 authorization example. It runs the same graph, business rules, and payment code.
 It is not an offline LLM or a general-purpose parser. Unknown inputs fail clearly.
 Mode labels appear in results and terminal output; logs distinguish simulation
-calls from real model calls and omit fictitious token usage. `offline.db` is
-installed separately with `setup_inventory.py --offline`, keeping demo payments
-out of the live ledger. Model credentials are neither required nor read offline.
+calls from real model calls and omit fictitious token usage. `setup_inventory.py` initializes both databases in one setup; `offline.db`
+keeps demo payments out of the live ledger. Model credentials are neither required nor read offline.
 
 Structured operational logs are implemented as per-run local JSON-lines files.
 They supplement the assessment's logging requirement with run/invoice correlation,
