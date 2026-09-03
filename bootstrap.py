@@ -3,7 +3,6 @@
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 
@@ -25,24 +24,30 @@ def create_environment() -> None:
     if VENV.exists():
         print("Removing an incomplete .venv from an earlier setup attempt...", flush=True)
         shutil.rmtree(VENV)
-    print("Creating .venv (this can take a minute on Windows)...", flush=True)
-    process = subprocess.Popen([sys.executable, "-m", "venv", str(VENV)])
-    while process.poll() is None:
-        time.sleep(5)
-        if process.poll() is None:
-            print("  Still creating the Python environment...", flush=True)
-    if process.returncode:
-        raise SystemExit("Could not create .venv. See the error above.")
+    print("Creating .venv...", flush=True)
+    try:
+        # Miniconda's ensurepip subprocess can stall on Windows. The parent
+        # interpreter's pip installs directly into this environment below.
+        subprocess.run(
+            [sys.executable, "-m", "venv", "--without-pip", str(VENV)],
+            check=True,
+        )
+    except subprocess.CalledProcessError as error:
+        raise SystemExit("Could not create .venv. See the error above.") from error
 
 
 def main() -> None:
     require_python_312()
     create_environment()
     print("Installing pinned dependencies...", flush=True)
-    subprocess.run(
-        [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "--python", str(VENV_PYTHON),
+             "install", "pip", "-r", str(ROOT / "requirements.txt")],
+            check=True,
+        )
+    except subprocess.CalledProcessError as error:
+        raise SystemExit("Could not install dependencies. See the error above.") from error
     print("Initializing local databases...", flush=True)
     subprocess.run([str(VENV_PYTHON), str(ROOT / "setup_inventory.py")], check=True)
     print("InvoiceFlow setup complete.", flush=True)
