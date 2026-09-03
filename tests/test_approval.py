@@ -34,7 +34,7 @@ class ApprovalTests(unittest.TestCase):
         self.chat = self.client.chat.create.return_value
         self.chat.messages = []
         self.record = ApprovalRecord()
-        self.invoice = Invoice(vendor="Example", amount="10000", currency="USD",
+        self.invoice = Invoice(vendor="Example", invoice_number="INV-TEST", amount="10000", currency="USD",
                                due_date="2026-09-01", items=[{"name": "WidgetA", "quantity": "1"}])
         self.settings = ApprovalSettings()
 
@@ -172,6 +172,7 @@ class ApprovalTests(unittest.TestCase):
             graph = build_workflow(self.client, database_path=database, approval_settings=self.settings)
             for status in ("approved", "pending", "rejected", "failed", "invalid"):
                 with self.subTest(status=status):
+                    self.invoice.invoice_number = f"INV-{status}"
                     self.invoice.amount = self.invoice.amount.__class__("10001")
                     self.invoice.items[0].quantity = self.invoice.amount.__class__("99" if status == "invalid" else "1")
                     self.settings.mock_vp.response = status if status in ("approved", "pending", "rejected") else "pending"

@@ -22,6 +22,8 @@ class Invoice(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     vendor: str | None = None
+    invoice_number: str | None = None
+    revision: str | None = None
     amount: Decimal | None = None
     currency: str | None = None
     currency_qualification: Literal["explicit", "unqualified_dollar", "missing", "conflicting"] | None = None
@@ -45,7 +47,7 @@ class ProcessingEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage: Literal["ingestion", "validation", "approval", "payment"]
-    status: Literal["started", "completed", "failed", "pending", "rejected"]
+    status: Literal["started", "completed", "failed", "pending", "rejected", "held"]
     timestamp: AwareDatetime
     reason: str | None = None
 
@@ -118,7 +120,7 @@ class PaymentReceipt(BaseModel):
     """Receipt from the local simulation; no funds are transferred."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    status: Literal["simulated_paid"] = "simulated_paid"
+    status: Literal["simulated_paid", "already_paid"] = "simulated_paid"
     payment_id: str
     vendor: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
@@ -139,6 +141,7 @@ class ProcessingRecord(BaseModel):
     reviews: list[ReviewAttempt] = Field(default_factory=list)
     approval: ApprovalRecord | None = None
     payment: PaymentReceipt | None = None
+    payment_hold: str | None = None
 
     @field_validator("received_at")
     @classmethod

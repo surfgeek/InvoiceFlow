@@ -14,7 +14,8 @@ class InvoiceTests(unittest.TestCase):
         invoice = Invoice()
         self.assertEqual(
             invoice.model_dump(),
-            dict(vendor=None, amount=None, currency=None, currency_qualification=None, items=None, due_date=None),
+            dict(vendor=None, invoice_number=None, revision=None, amount=None, currency=None,
+                 currency_qualification=None, items=None, due_date=None),
         )
 
     def test_decimal_precision_survives_json_round_trip(self) -> None:

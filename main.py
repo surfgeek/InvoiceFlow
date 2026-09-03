@@ -25,6 +25,7 @@ OUTCOME_LABELS = {
     "simulated_paid": "Simulated paid", "pending_approval": "Pending approval",
     "rejected": "Rejected", "validation_blocked": "Validation blocked",
     "processing_error": "Processing error",
+    "already_paid": "Already paid", "payment_held": "Payment held for review",
 }
 
 
@@ -35,6 +36,10 @@ def processing_outcome(result: dict) -> str:
     if result.get("validation_issues"):
         return "validation_blocked"
     record = result["record"]
+    if record.payment_hold:
+        return "payment_held"
+    if record.payment is not None and record.payment.status == "already_paid":
+        return "already_paid"
     if record.approval is not None:
         if record.approval.status == "pending":
             return "pending_approval"
@@ -61,7 +66,7 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
         output["error"] = result["error"]
         print(f"{path}: {result['error']}", file=sys.stderr)
     output["outcome"] = processing_outcome(result)
-    exit_code = 0 if output["outcome"] == "simulated_paid" else 1
+    exit_code = 0 if output["outcome"] in ("simulated_paid", "already_paid") else 1
     log_event("invoice_finished", invoice_id=record.invoice_id, exit_code=exit_code,
               duration_seconds=monotonic()-started,
               validation_issue_count=len(result.get("validation_issues", [])), outcome=output["outcome"])
@@ -143,7 +148,7 @@ def main() -> int:
                 output, exit_code = process_invoice(graph, paths[0])
             else:
                 output = process_folder(graph, paths, workers)
-                exit_code = 0 if output["summary"]["simulated_paid"] == len(paths) else 1
+                exit_code = 0 if (output["summary"]["simulated_paid"] + output["summary"]["already_paid"]) == len(paths) else 1
         log_event("run_result", exit_code=exit_code, file_count=len(paths))
         print(json.dumps(output, indent=2))
     return exit_code

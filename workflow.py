@@ -17,7 +17,7 @@ from currency_policy import apply_currency_policy
 from extraction import DEFAULT_MODEL, ExtractionError, extract_invoice
 from models import ApprovalRecord, Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
 from operational_logging import log_event, logging_context
-from payment import PaymentError, pay_invoice
+from payment import PaymentError, PaymentHold, lookup_payment, pay_invoice
 from setup_inventory import DATABASE_PATH
 from source_review import review_invoice
 from validation import InventoryValidationError, validate_invoice
@@ -36,7 +36,7 @@ class WorkflowState(TypedDict, total=False):
 
 
 def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation", "approval", "payment"],
-              status: Literal["started", "completed", "failed", "pending", "rejected"], reason: str | None = None) -> None:
+              status: Literal["started", "completed", "failed", "pending", "rejected", "held"], reason: str | None = None) -> None:
     """Timestamp an outcome in the current node's copy of the processing record."""
     record.events.append(ProcessingEvent(
         stage=stage, status=status, timestamp=datetime.now(timezone.utc), reason=reason,
@@ -53,6 +53,11 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
             log_event("stage_started")
             try:
                 update = node({**state, "record": record})
+            except PaymentHold as hold:
+                record.payment_hold = str(hold)
+                add_event(record, "payment", "held", str(hold))
+                update = {}
+                log_event("payment_held", duration_seconds=monotonic()-started)
             except (DocumentReadError, ExtractionError, InventoryValidationError, ApprovalError, PaymentError) as error:
                 add_event(record, stage, "failed", str(error))
                 update = {"error": str(error)}
@@ -151,9 +156,18 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
     def pay(state: WorkflowState) -> WorkflowState:
         record = state["record"]
         add_event(record, "payment", "started")
-        record.payment = pay_invoice(state["invoice"], record.approval)
-        add_event(record, "payment", "completed", "Simulated payment; no funds transferred.")
+        record.payment = pay_invoice(state["invoice"], record.approval, database_path)
+        add_event(record, "payment", "completed", "Already paid; no new payment." if
+                  record.payment.status == "already_paid" else "Simulated payment; no funds transferred.")
         log_event("payment_completed", status=record.payment.status, payment_id=record.payment.payment_id)
+        return {}
+
+    def check_payment(state: WorkflowState) -> WorkflowState:
+        record = state["record"]
+        record.payment = lookup_payment(state["invoice"], database_path)
+        if record.payment is not None:
+            add_event(record, "payment", "completed", "Already paid; no new payment.")
+            log_event("payment_already_paid", payment_id=record.payment.payment_id)
         return {}
 
     builder = StateGraph(WorkflowState)
@@ -162,6 +176,7 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
     builder.add_node("validate", guarded(validate, "validation"))
     builder.add_node("approve", guarded(approve, "approval"))
     builder.add_node("pay", guarded(pay, "payment"))
+    builder.add_node("check_payment", guarded(check_payment, "payment"))
     builder.add_edge(START, "read")
     for source, destination in (("read", "extract"), ("extract", "review"), ("correct", "review")):
         builder.add_conditional_edges(
@@ -170,7 +185,10 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
         )
     builder.add_conditional_edges("review", after_review, ["validate", "correct", END])
     builder.add_conditional_edges("validate", lambda state:
-        END if state.get("error") or state.get("validation_issues") else "approve", ["approve", END])
+        END if state.get("error") or state.get("validation_issues") else "check_payment", ["check_payment", END])
+    builder.add_conditional_edges("check_payment", lambda state:
+        END if state.get("error") or state["record"].payment_hold or state["record"].payment else "approve",
+        ["approve", END])
     builder.add_conditional_edges("approve", lambda state:
         "pay" if not state.get("error") and state["record"].approval is not None
         and state["record"].approval.status == "approved" else END, ["pay", END])

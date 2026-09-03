@@ -1,4 +1,4 @@
-"""Create the local inventory database required by the assessment."""
+"""Install the local inventory and simulated-payment schemas."""
 
 import sqlite3
 from pathlib import Path
@@ -14,7 +14,7 @@ SEED_INVENTORY = [
 
 
 def setup_inventory(database_path: str | Path = DATABASE_PATH) -> None:
-    """Create missing inventory records without changing existing stock values."""
+    """Install missing tables and seed inventory, preserving stock and payments."""
     connection = sqlite3.connect(database_path)
     try:
         # Commit seed inserts together, or roll them back if an insert fails.
@@ -28,10 +28,16 @@ def setup_inventory(database_path: str | Path = DATABASE_PATH) -> None:
                 "ON CONFLICT(item) DO NOTHING",
                 SEED_INVENTORY,
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS payments ("
+                "vendor_key TEXT NOT NULL, invoice_key TEXT NOT NULL, "
+                "fingerprint TEXT NOT NULL, receipt_json TEXT NOT NULL, "
+                "PRIMARY KEY (vendor_key, invoice_key))"
+            )
     finally:
         connection.close()
 
 
 if __name__ == "__main__":
     setup_inventory()
-    print(f"Inventory database ready: {DATABASE_PATH}")
+    print(f"Inventory and payment database ready: {DATABASE_PATH}")
