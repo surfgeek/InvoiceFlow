@@ -121,6 +121,8 @@ against the source before Python checks local inventory. JSON output contains
 The command makes two model calls for a clean extraction, or at most four when
 correction is needed. Each call has a 60-second timeout. Extraction has a 2,048-token
 output limit; review has a 4,096-token limit. Incomplete output is rejected.
+Both calls explicitly use low reasoning effort to avoid Grok 4.6's high default
+for these focused tasks.
 Processing failures write an error to stderr and JSON containing `error` and the
 `processing` record to stdout, with exit code 1. Missing credentials and argument
 errors occur before processing and are reported to stderr only. Validation issues
@@ -132,7 +134,11 @@ WidgetA quantity `10`, WidgetB quantity `5`, and due date `2026-02-01`, matching
 the source. Currency remained null because `$` alone is ambiguous. This is a
 single integration check, not evidence of accuracy across the fixture set.
 With validation enabled, this invoice reports unknown currency as a payment blocker.
-The review/correction flow has automated mocked coverage; it has not been tested live.
+One live extraction and clean source review of invoice 1001 with low reasoning
+took approximately 4.0 and 3.6 seconds respectively and preserved the expected
+fields. The earlier default-reasoning run took approximately 10.7 and 14.4 seconds
+for that file. These are individual observations, not latency guarantees or
+accuracy evaluations. The correction path has mocked coverage, not a live test.
 
 ## Process a folder
 

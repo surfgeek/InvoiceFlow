@@ -57,6 +57,7 @@ def extract_invoice(
         ))
     chat = client.chat.create(
         model=model,
+        reasoning_effort="low",
         messages=messages,
         response_format=chat_pb2.ResponseFormat(
             format_type=chat_pb2.FORMAT_TYPE_JSON_SCHEMA,

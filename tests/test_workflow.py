@@ -62,6 +62,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.route, ["read", "extract", "review", "validate"])
         self.assertEqual(self.record.reviews[0].outcome, "passed")
         self.assertEqual(self.record.reviews[0].timestamp.utcoffset().total_seconds(), 0)
+        self.assertTrue(all(call.kwargs["reasoning_effort"] == "low"
+                            for call in self.client.chat.create.call_args_list))
 
     def test_correction_preserves_original_findings_and_snapshots(self):
         self.responses(self.original, self.issues, self.corrected, self.clean)

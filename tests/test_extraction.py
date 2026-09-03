@@ -33,6 +33,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual([item.quantity for item in invoice.items], [Decimal("-1.5"), Decimal("2")])
         request = self.client.chat.create.call_args.kwargs
         self.assertEqual(request["model"], "selected-model")
+        self.assertEqual(request["reasoning_effort"], "low")
         self.assertIn("original source", str(request["messages"][1]))
         schema = json.loads(request["response_format"].schema)
         self.assertEqual(schema["properties"]["amount"]["anyOf"][0]["type"], "string")

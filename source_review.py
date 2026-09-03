@@ -50,6 +50,7 @@ def review_invoice(text: str, invoice: Invoice, client: Client, model: str) -> S
     """Make a separate structured review call and reject incomplete responses."""
     chat = client.chat.create(
         model=model,
+        reasoning_effort="low",
         messages=[system(REVIEW_PROMPT), user(json.dumps({
             "source": text, "invoice": invoice.model_dump(mode="json"),
         }))],
