@@ -1,4 +1,4 @@
-"""LangGraph routing for document ingestion, source review, and validation."""
+"""LangGraph routing for ingestion, validation, and simulated approval."""
 
 import json
 from collections.abc import Callable
@@ -11,10 +11,11 @@ from langgraph.graph import END, START, StateGraph
 from xai_sdk import Client
 
 from document_reader import DocumentReadError, read_document
-from configuration import DollarPolicy
+from configuration import ApprovalSettings, DollarPolicy
+from approval import ApprovalError, review_approval
 from currency_policy import apply_currency_policy
 from extraction import DEFAULT_MODEL, ExtractionError, extract_invoice
-from models import Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
+from models import ApprovalRecord, Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
 from operational_logging import log_event, logging_context
 from setup_inventory import DATABASE_PATH
 from source_review import review_invoice
@@ -33,8 +34,8 @@ class WorkflowState(TypedDict, total=False):
     error: str
 
 
-def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation"],
-              status: Literal["started", "completed", "failed"], reason: str | None = None) -> None:
+def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation", "approval"],
+              status: Literal["started", "completed", "failed", "pending", "rejected"], reason: str | None = None) -> None:
     """Timestamp an outcome in the current node's copy of the processing record."""
     record.events.append(ProcessingEvent(
         stage=stage, status=status, timestamp=datetime.now(timezone.utc), reason=reason,
@@ -42,7 +43,7 @@ def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation"
 
 
 def guarded(node: Callable[[WorkflowState], WorkflowState],
-            stage: Literal["ingestion", "validation"]) -> Callable[[WorkflowState], WorkflowState]:
+            stage: Literal["ingestion", "validation", "approval"]) -> Callable[[WorkflowState], WorkflowState]:
     """Preserve node history on expected failures without mutating earlier states."""
     def run(state: WorkflowState) -> WorkflowState:
         record = state["record"].model_copy(deep=True)
@@ -51,7 +52,7 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
             log_event("stage_started")
             try:
                 update = node({**state, "record": record})
-            except (DocumentReadError, ExtractionError, InventoryValidationError) as error:
+            except (DocumentReadError, ExtractionError, InventoryValidationError, ApprovalError) as error:
                 add_event(record, stage, "failed", str(error))
                 update = {"error": str(error)}
                 log_event("stage_failed", error_type=type(error).__name__, duration_seconds=monotonic()-started)
@@ -68,7 +69,8 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
 
 def build_workflow(client: Client, model: str = DEFAULT_MODEL,
                    database_path: str | Path = DATABASE_PATH, *,
-                   reasoning_effort: str = "low", dollar_policy: DollarPolicy | None = None):
+                   reasoning_effort: str = "low", dollar_policy: DollarPolicy | None = None,
+                   approval_settings: ApprovalSettings | None = None):
     """Compile a sequential graph with at most one source-correction detour."""
     def read(state: WorkflowState) -> WorkflowState:
         add_event(state["record"], "ingestion", "started")
@@ -130,10 +132,26 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
             return END
         return "validate" if state["record"].reviews[-1].outcome == "passed" else "correct"
 
+    def approve(state: WorkflowState) -> WorkflowState:
+        record = state["record"]
+        add_event(record, "approval", "started")
+        record.approval = ApprovalRecord()
+        try:
+            review_approval(state["invoice"], record.approval, approval_settings or ApprovalSettings(),
+                            client, model, reasoning_effort, record.currency_assumption)
+        except ApprovalError as error:
+            record.approval.status, record.approval.reason = "failed", str(error)
+            raise
+        status = record.approval.status
+        add_event(record, "approval", "completed" if status == "approved" else status, record.approval.reason)
+        log_event("approval_decision", status=status)
+        return {}
+
     builder = StateGraph(WorkflowState)
     for name, node in (("read", read), ("extract", extract), ("review", review), ("correct", correct)):
         builder.add_node(name, guarded(node, "ingestion"))
     builder.add_node("validate", guarded(validate, "validation"))
+    builder.add_node("approve", guarded(approve, "approval"))
     builder.add_edge(START, "read")
     for source, destination in (("read", "extract"), ("extract", "review"), ("correct", "review")):
         builder.add_conditional_edges(
@@ -141,5 +159,7 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
             {"stop": END, "continue": destination},
         )
     builder.add_conditional_edges("review", after_review, ["validate", "correct", END])
-    builder.add_edge("validate", END)
+    builder.add_conditional_edges("validate", lambda state:
+        END if state.get("error") or state.get("validation_issues") else "approve", ["approve", END])
+    builder.add_edge("approve", END)
     return builder.compile()

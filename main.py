@@ -1,4 +1,4 @@
-"""Command-line entry point for invoice extraction and validation."""
+"""Command-line entry point for invoice processing and simulated approval."""
 
 import argparse
 import json
@@ -29,13 +29,16 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     started = monotonic()
     result = graph.invoke({"invoice_path": path, "record": record})
     output = {"processing": result["record"].model_dump(mode="json")}
+    if "invoice" in result:
+        output["invoice"] = result["invoice"].model_dump(mode="json")
+    if "validation_issues" in result:
+        output["validation_issues"] = result["validation_issues"]
     if result.get("error"):
         output["error"] = result["error"]
         print(f"{path}: {result['error']}", file=sys.stderr)
-    else:
-        output["invoice"] = result["invoice"].model_dump(mode="json")
-        output["validation_issues"] = result["validation_issues"]
-    exit_code = 1 if result.get("error") or result.get("validation_issues") else 0
+    approval = result["record"].approval
+    exit_code = 1 if (result.get("error") or result.get("validation_issues")
+                      or approval is None or approval.status != "approved") else 0
     log_event("invoice_finished", invoice_id=record.invoice_id, exit_code=exit_code,
               duration_seconds=monotonic()-started,
               validation_issue_count=len(result.get("validation_issues", [])))
@@ -70,8 +73,8 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
 
 
 def main() -> int:
-    """Print extraction and validation results, or report an operational failure."""
-    parser = argparse.ArgumentParser(description="Extract and validate an invoice using Grok and SQLite.")
+    """Print invoice results and approval history, or report an operational failure."""
+    parser = argparse.ArgumentParser(description="Extract, validate, and review invoice approval using Grok and SQLite.")
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--invoice_path", type=Path, help="Process one invoice file.")
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")
@@ -113,7 +116,8 @@ def main() -> int:
         with Client(api_key=api_key, timeout=settings.model.timeout_seconds) as client:
             graph = build_workflow(client, os.getenv("XAI_MODEL") or settings.model.name,
                                    reasoning_effort=settings.model.reasoning_effort,
-                                   dollar_policy=settings.currency.unqualified_dollar)
+                                   dollar_policy=settings.currency.unqualified_dollar,
+                                   approval_settings=settings.approval)
             if args.invoice_dir is None:
                 output, exit_code = process_invoice(graph, paths[0])
             else:
