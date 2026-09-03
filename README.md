@@ -29,8 +29,8 @@ python bootstrap.py
 ```
 
 This one command verifies Python 3.12, creates or repairs `.venv`, installs the
-pinned dependencies, and initializes both databases. It prints progress while
-Windows creates the environment. When it reports completion, activate it:
+pinned dependencies, and initializes both databases. When it reports completion,
+activate it:
 
 ```bash
 source .venv/Scripts/activate
