@@ -14,7 +14,8 @@ Invoice and processing metadata models are defined in `models.py`.
 Document text reading is implemented in `document_reader.py`.
 Grok extraction is implemented in `extraction.py`, with a CLI in `main.py`.
 LangGraph is the selected orchestration framework. The extraction CLI is not yet
-connected to a graph; business validation, approval, payment, self-correction,
+connected to a graph. Required-field and SQLite inventory checks are implemented
+in `validation.py`; approval, payment, extraction review, self-correction,
 and runtime processing events are not yet implemented.
 
 ## Python environment and LangGraph example
@@ -97,6 +98,7 @@ precedence over the file. `XAI_MODEL` is optional and defaults to `grok-4.6`.
 Run:
 
 ```powershell
+.venv\Scripts\python setup_inventory.py
 .venv\Scripts\python main.py --invoice_path=data/invoices/invoice_1001.txt
 ```
 
@@ -105,18 +107,39 @@ It requires internet access and a funded API key. External inventory, approval,
 and payment services are not called. The reader supplies text for every supported
 format; Grok extracts and normalizes the fields using a JSON schema generated
 from `Invoice`. Decimal fields are requested as strings to preserve precision.
-Pydantic validates the returned data locally before it is printed as JSON.
+Pydantic validates the returned structure locally, then Python checks the invoice
+against the local inventory. JSON output contains `invoice` and `validation_issues`.
 
 The command currently makes one extraction request, with a 60-second timeout
 and a 2,048-token output limit. Incomplete output is rejected. Errors go to stderr
-with exit code 1; successful extraction exits with code 0. Success means the
-output passed structural checks, not that the invoice is correct or approved.
+with exit code 1. Validation issues are printed in JSON and also return exit code 1;
+exit code 0 means extraction and the implemented validation checks passed.
+It does not mean the invoice is approved or its extraction is verified against the source.
 There is no automatic correction or retry loop yet.
 
 A live check of `invoice_1001.txt` returned Widgets Inc., amount `5000.00`,
 WidgetA quantity `10`, WidgetB quantity `5`, and due date `2026-02-01`, matching
 the source. Currency remained null because `$` alone is ambiguous. This is a
 single integration check, not evidence of accuracy across the fixture set.
+With validation enabled, this invoice reports unknown currency as a payment blocker.
+
+## Invoice validation
+
+The implemented rules require a nonblank vendor, positive amount, due date,
+and at least one item with a nonblank name and positive quantity. Unknown currency
+is reported as a payment blocker without skipping the remaining checks.
+All detected issues are collected. Missing inventory or an unreadable database
+is an operational error, not evidence of an invalid invoice.
+
+Item names match SQLite records exactly. Repeated names are combined before
+comparing quantities with stock; unknown items and insufficient stock are reported.
+Negative lines cannot cancel positive quantities. Validation opens SQLite read-only
+and does not reserve or decrement stock. Fractional positive quantities are accepted;
+no whole-unit restriction, past-due rejection, or approval amount threshold is imposed.
+
+These are prototype business rules. Source comparison, arithmetic reconciliation
+of invoice totals, currency-code verification, and the approval/payment stages
+are not yet implemented. A nonempty currency field alone does not verify a currency.
 
 ### Additional file formats
 
@@ -171,7 +194,10 @@ Plugin tests cover discovery, restart behavior, extension conflicts, invalid
 definitions, dependency failures, reader errors, and execution in a fresh process.
 Extraction tests mock the xAI boundary and cover precise decimals, missing fields,
 malformed and incomplete output, and provider failures. CLI integration tests use
-the real document reader with mocked Grok responses. The automated suite makes
+the real document reader and a temporary SQLite database with mocked Grok responses.
+Validation tests cover required fields, repeated items, stock boundaries, exact
+quantity aggregation, unknown currency, unchanged stock, and database failures.
+The automated suite makes
 no paid model calls and does not load a real API key.
 The inventory tests are database integration tests and a setup CLI test. End-to-end invoice
 processing tests will be added when that workflow is implemented.
