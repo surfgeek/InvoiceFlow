@@ -25,21 +25,12 @@ extracted `InvoiceFlow-main` folder.
 **Set up InvoiceFlow while connected to the internet:**
 
 ```bash
-python bootstrap.py
+python -m pip install -r requirements.txt
+python setup_inventory.py
 ```
 
-This one command verifies Python 3.12, creates or repairs `.venv`, installs the
-pinned dependencies, and initializes both databases. When it reports completion,
-activate it:
-
-```bash
-source .venv/Scripts/activate
-```
-
-On macOS/Linux, use `source .venv/bin/activate`. Run all remaining commands from
-the repository folder with this environment active.
-
-Setup initializes inventory stock (WidgetA 15, WidgetB 10,
+The first command installs the pinned Python dependencies. The second initializes
+inventory stock (WidgetA 15, WidgetB 10,
 GadgetX 5, FakeItem 0) and payment ledgers in `inventory.db` and `offline.db`.
 Both belong to the same application; separate histories keep offline demo payments
 out of live runs. SQLite is included with Python. Rerunning setup preserves records.
@@ -122,7 +113,7 @@ Exit code 0 means every invoice was paid in simulation or already recorded;
 
 | If you see… | What to do |
 | --- | --- |
-| Missing database/schema | Run `python bootstrap.py` to complete setup. |
+| Missing database/schema | Run `python setup_inventory.py` to initialize both databases. |
 | Missing API key | Set `XAI_API_KEY` in `.env`, or use `--offline`. |
 | No offline fixture | Use an unchanged bundled invoice or remove `--offline` for live extraction. |
 | Report filename rejected | Choose a new `.html` filename in an existing directory outside the input folder. |
