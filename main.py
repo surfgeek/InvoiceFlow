@@ -77,12 +77,15 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     return output, exit_code
 
 
-def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -> dict:
+def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int,
+                   on_result=None, process=None) -> dict:
     """Process independent invoices concurrently, retaining filename order in JSON."""
+    invoice_processor = process or (lambda path: process_invoice(graph, path))
+
     def run(index: int, path: Path) -> dict:
         print(f"[{index}/{len(paths)}] Processing {path.name}...", file=sys.stderr, flush=True)
         started = monotonic()
-        item, code = process_invoice(graph, path)
+        item, code = invoice_processor(path)
         elapsed = round(monotonic() - started, 2)
         status = OUTCOME_LABELS[item["outcome"]]
         print(f"[{index}/{len(paths)}] {status}: {path.name} ({elapsed:.2f}s)",
@@ -96,7 +99,10 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
         pending = {executor.submit(copy_context().run, run, index, path): index
                    for index, path in enumerate(paths, start=1)}
         for future in as_completed(pending):
-            results[pending[future]] = future.result()
+            item = future.result()
+            results[pending[future]] = item
+            if on_result is not None:
+                on_result(item)
     ordered = [results[index] for index in sorted(results)]
     counts = {outcome: sum(item["outcome"] == outcome for item in ordered) for outcome in OUTCOME_LABELS}
     print("Summary: " + ", ".join(f"{count} {OUTCOME_LABELS[outcome].lower()}"

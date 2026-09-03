@@ -22,24 +22,24 @@ Alternatively, open the [InvoiceFlow repository](https://github.com/surfgeek/Inv
 select **Code → Download ZIP**, extract the ZIP, and open a Bash terminal in the
 extracted `InvoiceFlow-main` folder.
 
-**Create the Python environment while connected to the internet:**
+**Set up InvoiceFlow while connected to the internet:**
 
 ```bash
-python -m venv .venv
+python bootstrap.py
+```
+
+This one command verifies Python 3.12, creates or repairs `.venv`, installs the
+pinned dependencies, and initializes both databases. It prints progress while
+Windows creates the environment. When it reports completion, activate it:
+
+```bash
 source .venv/Scripts/activate
-python -m pip install -r requirements.txt
 ```
 
-Run all remaining commands from this repository folder with the virtual environment
-active. On macOS/Linux, activate it with `source .venv/bin/activate` instead.
+On macOS/Linux, use `source .venv/bin/activate`. Run all remaining commands from
+the repository folder with this environment active.
 
-**Create the required database before running the app:**
-
-```bash
-python setup_inventory.py
-```
-
-This single setup command initializes inventory stock (WidgetA 15, WidgetB 10,
+Setup initializes inventory stock (WidgetA 15, WidgetB 10,
 GadgetX 5, FakeItem 0) and payment ledgers in `inventory.db` and `offline.db`.
 Both belong to the same application; separate histories keep offline demo payments
 out of live runs. SQLite is included with Python. Rerunning setup preserves records.
@@ -54,7 +54,28 @@ Offline mode needs no key or network access at runtime. Live mode uses paid API
 calls. The two databases keep payment histories separate; retain them between runs.
 Keys, databases, and operational logs are excluded from Git.
 
-## How to run from the command line
+## How to run
+
+### Browser UI
+
+```bash
+python ui.py
+```
+
+The app opens at `http://127.0.0.1:8000` and defaults to the bundled
+`data/invoices` directory. Select another local directory with **Browse** or enter
+its path, then choose **Process**. Each invoice appears as it completes. When the
+batch finishes, **Open completed report** shows the full evidence and audit history.
+
+The UI starts in live Grok mode. If the API key is missing, it explains the issue
+and continues with offline fixtures. If a Grok request fails, affected invoices are
+retried offline and the remaining batch continues offline. Offline recovery can
+process unchanged bundled invoices; new or edited documents show a clear error
+because the offline mode is a fixed demonstration rather than a local LLM.
+
+Stop the local UI with **Ctrl+C** in the terminal.
+
+### Command line
 
 **Start here: process the provided invoices and create a readable report.**
 
@@ -90,9 +111,9 @@ Offline mode recognizes unchanged bundled invoice text, including renamed copies
 with supported formats. It does **not** perform LLM reasoning or parse new documents.
 Use live mode for new or edited inputs. Results explicitly identify the mode.
 
-If a Grok API request fails, the affected invoice stops with an error and suggests
-`--offline` for a local demo of bundled invoices. The app never switches modes
-automatically. Retry live processing when API access is restored.
+The CLI keeps mode selection explicit. If a Grok API request fails, the affected
+invoice stops with an error and suggests `--offline` for a local demo of bundled
+invoices. It does not switch modes automatically.
 
 Folder processing is concurrent and nonrecursive. Handled per-invoice failures
 do not stop the batch. Keep JSON and HTML output outside the input folder.
@@ -101,7 +122,7 @@ Exit code 0 means every invoice was paid in simulation or already recorded;
 
 | If you see… | What to do |
 | --- | --- |
-| Missing database/schema | Run `python setup_inventory.py` to initialize both databases. |
+| Missing database/schema | Run `python bootstrap.py` to complete setup. |
 | Missing API key | Set `XAI_API_KEY` in `.env`, or use `--offline`. |
 | No offline fixture | Use an unchanged bundled invoice or remove `--offline` for live extraction. |
 | Report filename rejected | Choose a new `.html` filename in an existing directory outside the input folder. |

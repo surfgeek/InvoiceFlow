@@ -81,9 +81,9 @@ automatic reconciliation; changing a VP response does not resolve a revision con
 ## If the API is unavailable
 
 There is one application installation. Live mode needs xAI access and credits.
-If the API request fails, the affected invoice stops with an error; the app does
-not silently replace live processing with simulated answers. Retry when access is
-restored, or explicitly run the local demo:
+The browser UI explains a missing key or failed Grok request, retries affected
+bundled invoices offline, and continues the batch. The CLI keeps mode selection
+explicit: retry when access is restored, or run the local demo with:
 
 ```bash
 python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
