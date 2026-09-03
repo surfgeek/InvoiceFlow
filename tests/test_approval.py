@@ -188,7 +188,10 @@ class ApprovalTests(unittest.TestCase):
                         self.assertIsNone(audit)
                     else:
                         self.assertEqual(audit["status"], status)
-                        self.assertEqual(output["processing"]["events"][-1]["stage"], "approval")
+                        self.assertEqual(output["processing"]["events"][-1]["stage"],
+                                         "payment" if status == "approved" else "approval")
                         self.assertEqual(audit["vp_response"]["status"], self.settings.mock_vp.response)
+                    self.assertEqual(output["processing"]["payment"] is not None, status == "approved")
                     self.assertIn("invoice", output)
-                    self.assertFalse(any(event["stage"] == "payment" for event in output["processing"]["events"]))
+                    self.assertEqual(any(event["stage"] == "payment" for event in output["processing"]["events"]),
+                                     status == "approved")

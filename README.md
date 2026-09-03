@@ -1,8 +1,8 @@
 # InvoiceFlow
 
 InvoiceFlow uses Grok and LangGraph to extract invoice data, review it against the
-source, validate it against a local SQLite inventory, and simulate approval.
-It supports TXT, CSV, JSON, XML, Markdown, and text-based PDFs. Payment is not yet implemented.
+source, validate it against a local SQLite inventory, and simulate approval and payment.
+It supports TXT, CSV, JSON, XML, Markdown, and text-based PDFs. No real funds are transferred.
 
 ## How to set up
 
@@ -47,8 +47,10 @@ outside the input folder.
 Processing uses paid API calls. Progress appears in the terminal; JSON results
 are written when the run finishes. Results include extracted data, validation
 issues, source-review history, and approval decisions in `processing.approval`.
-Exit code **0** means approved; **1** means failed, blocked, rejected, or pending.
-Folder summaries count every non-approved result under `failed`. Approval does not mean paid.
+Simulated receipts appear in `processing.payment`, with the vendor, exact amount,
+currency, payment ID, and UTC timestamp. Exit code **0** means simulated payment
+completed; **1** means failed, blocked, rejected, or pending. Folder summaries count
+every result without a successful simulated payment under `failed`.
 
 Each run also writes a structured log under `logs/` and prints its path. Logs
 include stage timings, model usage, and errors, linked to results by run/invoice IDs.
@@ -115,6 +117,8 @@ USD defaults to 10,000. To support another currency, add its limit under
 `[approval.limits]`, for example `EUR = "8000"`. No conversion occurs; a currency
 without a configured limit stays pending. Pending results do not wait or resume
 automatically; update configuration and rerun to exercise a different mock response.
+Each successful rerun produces a new simulated receipt. Duplicate-payment prevention
+and durable payment storage are not implemented.
 
 Optional command-line overrides:
 

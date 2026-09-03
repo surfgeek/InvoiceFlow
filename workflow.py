@@ -1,4 +1,4 @@
-"""LangGraph routing for ingestion, validation, and simulated approval."""
+"""LangGraph routing from ingestion through simulated approval and payment."""
 
 import json
 from collections.abc import Callable
@@ -17,6 +17,7 @@ from currency_policy import apply_currency_policy
 from extraction import DEFAULT_MODEL, ExtractionError, extract_invoice
 from models import ApprovalRecord, Invoice, ProcessingEvent, ProcessingRecord, ReviewAttempt, ReviewFinding
 from operational_logging import log_event, logging_context
+from payment import PaymentError, pay_invoice
 from setup_inventory import DATABASE_PATH
 from source_review import review_invoice
 from validation import InventoryValidationError, validate_invoice
@@ -34,7 +35,7 @@ class WorkflowState(TypedDict, total=False):
     error: str
 
 
-def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation", "approval"],
+def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation", "approval", "payment"],
               status: Literal["started", "completed", "failed", "pending", "rejected"], reason: str | None = None) -> None:
     """Timestamp an outcome in the current node's copy of the processing record."""
     record.events.append(ProcessingEvent(
@@ -43,7 +44,7 @@ def add_event(record: ProcessingRecord, stage: Literal["ingestion", "validation"
 
 
 def guarded(node: Callable[[WorkflowState], WorkflowState],
-            stage: Literal["ingestion", "validation", "approval"]) -> Callable[[WorkflowState], WorkflowState]:
+            stage: Literal["ingestion", "validation", "approval", "payment"]) -> Callable[[WorkflowState], WorkflowState]:
     """Preserve node history on expected failures without mutating earlier states."""
     def run(state: WorkflowState) -> WorkflowState:
         record = state["record"].model_copy(deep=True)
@@ -52,7 +53,7 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
             log_event("stage_started")
             try:
                 update = node({**state, "record": record})
-            except (DocumentReadError, ExtractionError, InventoryValidationError, ApprovalError) as error:
+            except (DocumentReadError, ExtractionError, InventoryValidationError, ApprovalError, PaymentError) as error:
                 add_event(record, stage, "failed", str(error))
                 update = {"error": str(error)}
                 log_event("stage_failed", error_type=type(error).__name__, duration_seconds=monotonic()-started)
@@ -147,11 +148,20 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
         log_event("approval_decision", status=status)
         return {}
 
+    def pay(state: WorkflowState) -> WorkflowState:
+        record = state["record"]
+        add_event(record, "payment", "started")
+        record.payment = pay_invoice(state["invoice"], record.approval)
+        add_event(record, "payment", "completed", "Simulated payment; no funds transferred.")
+        log_event("payment_completed", status=record.payment.status, payment_id=record.payment.payment_id)
+        return {}
+
     builder = StateGraph(WorkflowState)
     for name, node in (("read", read), ("extract", extract), ("review", review), ("correct", correct)):
         builder.add_node(name, guarded(node, "ingestion"))
     builder.add_node("validate", guarded(validate, "validation"))
     builder.add_node("approve", guarded(approve, "approval"))
+    builder.add_node("pay", guarded(pay, "payment"))
     builder.add_edge(START, "read")
     for source, destination in (("read", "extract"), ("extract", "review"), ("correct", "review")):
         builder.add_conditional_edges(
@@ -161,5 +171,8 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
     builder.add_conditional_edges("review", after_review, ["validate", "correct", END])
     builder.add_conditional_edges("validate", lambda state:
         END if state.get("error") or state.get("validation_issues") else "approve", ["approve", END])
-    builder.add_edge("approve", END)
+    builder.add_conditional_edges("approve", lambda state:
+        "pay" if not state.get("error") and state["record"].approval is not None
+        and state["record"].approval.status == "approved" else END, ["pay", END])
+    builder.add_edge("pay", END)
     return builder.compile()

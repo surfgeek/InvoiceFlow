@@ -74,6 +74,10 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output)["invoice"]["vendor"], "Widgets Inc.")
         self.assertEqual(json.loads(output)["validation_issues"], [])
+        receipt = json.loads(output)["processing"]["payment"]
+        self.assertEqual(receipt["status"], "simulated_paid")
+        self.assertEqual(receipt["amount"], "5000")
+        self.assertEqual(receipt["currency"], "USD")
         self.assertTrue(error.startswith("Operational log:"))
         client.return_value.__exit__.assert_called_once()
 

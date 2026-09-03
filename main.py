@@ -1,4 +1,4 @@
-"""Command-line entry point for invoice processing and simulated approval."""
+"""Command-line entry point for invoice processing and simulated payment."""
 
 import argparse
 import json
@@ -37,8 +37,10 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
         output["error"] = result["error"]
         print(f"{path}: {result['error']}", file=sys.stderr)
     approval = result["record"].approval
+    payment = result["record"].payment
     exit_code = 1 if (result.get("error") or result.get("validation_issues")
-                      or approval is None or approval.status != "approved") else 0
+                      or approval is None or approval.status != "approved"
+                      or payment is None or payment.status != "simulated_paid") else 0
     log_event("invoice_finished", invoice_id=record.invoice_id, exit_code=exit_code,
               duration_seconds=monotonic()-started,
               validation_issue_count=len(result.get("validation_issues", [])))
@@ -74,7 +76,7 @@ def process_folder(graph: CompiledStateGraph, paths: list[Path], workers: int) -
 
 def main() -> int:
     """Print invoice results and approval history, or report an operational failure."""
-    parser = argparse.ArgumentParser(description="Extract, validate, and review invoice approval using Grok and SQLite.")
+    parser = argparse.ArgumentParser(description="Process invoices through validation, approval, and simulated payment.")
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--invoice_path", type=Path, help="Process one invoice file.")
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")

@@ -114,6 +114,18 @@ class ApprovalRecord(BaseModel):
     attempts: list[ApprovalAttempt] = Field(default_factory=list)
 
 
+class PaymentReceipt(BaseModel):
+    """Receipt from the local simulation; no funds are transferred."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    status: Literal["simulated_paid"] = "simulated_paid"
+    payment_id: str
+    vendor: str = Field(min_length=1)
+    amount: Decimal = Field(gt=0)
+    currency: str = Field(min_length=1)
+    timestamp: AwareDatetime
+
+
 class ProcessingRecord(BaseModel):
     """System metadata kept separate from the contents of the invoice."""
 
@@ -126,6 +138,7 @@ class ProcessingRecord(BaseModel):
     events: list[ProcessingEvent] = Field(default_factory=list)
     reviews: list[ReviewAttempt] = Field(default_factory=list)
     approval: ApprovalRecord | None = None
+    payment: PaymentReceipt | None = None
 
     @field_validator("received_at")
     @classmethod

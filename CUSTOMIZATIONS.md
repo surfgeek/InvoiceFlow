@@ -9,7 +9,7 @@ It does not replace the assessment or imply additional functionality is complete
 | Reader plugins discovered at startup | Add file formats without modifying or rebuilding the core application. | Implemented in `document_reader.py`. Install a reader module and its dependencies, then restart. Duplicate extensions and invalid plugins stop discovery with a clear error. |
 | Markdown reader | Provide an additional supported format and a concrete implementation of the plugin contract. | Implemented in `reader_plugins/markdown.py`. DOCX and PNG plugins are possible extensions, but are not implemented. |
 | Configurable currency policy | Preserve explicit currencies and allow Acme to define treatment of unqualified dollars. | `config.toml` selects `assume` with USD or `reject`. Qualification comes from extraction and source review; Python applies the policy afterward and records any assumption. Missing/conflicting currencies receive no fallback. The README defines the terms and configuration examples. No conversion or currency-specific rounding is implemented. |
-| UTC arrival and stage timestamps | Establish when a document entered the system and when processing started, completed, or failed. | The CLI records arrival and ingestion/validation/approval events in `ProcessingRecord`, including UTC timestamps and reasons. Payment events await that stage. Invoice due dates remain separate calendar dates. |
+| UTC arrival and stage timestamps | Establish when a document entered the system and when processing started, completed, or failed. | The CLI records arrival and ingestion/validation/approval/payment events in `ProcessingRecord`, including UTC timestamps and reasons. Invoice due dates remain separate calendar dates. |
 | Retained source-review findings | Preserve errors discovered during source review, including those later corrected. | Each review records an attempt number, UTC timestamp, invoice snapshot, findings with source excerpts and explanations, and resolution status. Findings survive correction and subsequent processing failures in stdout JSON. No automatic durable storage is implemented. |
 
 ## Scope distinctions
@@ -26,7 +26,7 @@ invoice detection, and automatic comparison with expected answers are not implem
 ### Agreed validation policies
 
 - Currency still unknown after the configured dollar policy blocks payment. Implemented as a validation issue; extraction
-  and inventory checks still run. The payment stage itself is not yet implemented.
+  and inventory checks still run.
 - Missing required fields, nonpositive amounts or quantities, unknown inventory
   items, and insufficient stock prevent progression to approval. Implemented as
   reported issues and a nonzero CLI exit status. LangGraph routes only invoices
@@ -48,8 +48,17 @@ Grok proposes a decision and a separate critique checks its reasons against the
 invoice and policy. One correction is allowed; code also checks the decision
 against the authorization. Unknown approval currencies stay pending. The result
 retains the limit, mock response, UTC response time, recommendations, and critique
-findings. Pending and rejected outcomes block progression. No approval inbox,
-automatic resume, or payment is implemented. Runtime settings are in `config.toml`.
+findings. Pending and rejected outcomes block progression. No approval inbox or
+automatic resume is implemented. Runtime settings are in `config.toml`.
+
+### Simulated payment
+
+Only final approval routes to the local payment function. Python passes the
+validated vendor, exact Decimal amount, and currency without another model call.
+The function returns a `simulated_paid` receipt with a generated ID and UTC timestamp;
+it makes no banking calls and does not change inventory. Payment failures retain
+the approval history and produce a nonzero CLI exit code. No automatic payment
+retries, duplicate-payment prevention, or durable receipt storage are implemented.
 
 ### Assessment and engineering scope
 
