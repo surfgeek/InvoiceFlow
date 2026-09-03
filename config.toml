@@ -13,3 +13,10 @@ workers = 4
 [currency.unqualified_dollar]
 action = "assume" # Change to "reject" to block instead.
 currency = "USD"  # Required for assume; ignored for reject.
+
+[approval.limits]
+USD = "10000" # At or below this amount: automatic approval is permitted.
+
+[approval.mock_vp]
+response = "pending" # approved, rejected, or pending; applies above the limit.
+reason = "Configured local mock VP response."

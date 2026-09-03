@@ -45,7 +45,7 @@ class ProcessingEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage: Literal["ingestion", "validation", "approval", "payment"]
-    status: Literal["started", "completed", "failed"]
+    status: Literal["started", "completed", "failed", "pending", "rejected"]
     timestamp: AwareDatetime
     reason: str | None = None
 
@@ -85,6 +85,47 @@ class ReviewAttempt(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class ApprovalDecision(BaseModel):
+    """A recommendation is never sufficient to override application policy."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    status: Literal["approved", "rejected", "pending"]
+    reason: str = Field(min_length=1)
+
+
+class ApprovalAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    timestamp: AwareDatetime
+    recommendation: ApprovalDecision
+    findings: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ApprovalRecord(BaseModel):
+    """Policy, external authorization, and model review kept separately."""
+
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["approved", "rejected", "pending", "failed"] = "pending"
+    reason: str = "Approval has not completed."
+    limit: Decimal | None = None
+    currency: str | None = None
+    vp_response: ApprovalDecision | None = None
+    vp_responded_at: AwareDatetime | None = None
+    attempts: list[ApprovalAttempt] = Field(default_factory=list)
+
+
+class PaymentReceipt(BaseModel):
+    """Receipt from the local simulation; no funds are transferred."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    status: Literal["simulated_paid"] = "simulated_paid"
+    payment_id: str
+    vendor: str = Field(min_length=1)
+    amount: Decimal = Field(gt=0)
+    currency: str = Field(min_length=1)
+    timestamp: AwareDatetime
+
+
 class ProcessingRecord(BaseModel):
     """System metadata kept separate from the contents of the invoice."""
 
@@ -96,6 +137,8 @@ class ProcessingRecord(BaseModel):
     currency_assumption: str | None = None
     events: list[ProcessingEvent] = Field(default_factory=list)
     reviews: list[ReviewAttempt] = Field(default_factory=list)
+    approval: ApprovalRecord | None = None
+    payment: PaymentReceipt | None = None
 
     @field_validator("received_at")
     @classmethod

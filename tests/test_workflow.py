@@ -20,6 +20,10 @@ from workflow import build_workflow
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
+        # These tests isolate ingestion routes; approval has separate graph tests.
+        approval = patch("workflow.review_approval")
+        approval.start()
+        self.addCleanup(approval.stop)
         self.client = Mock()
         self.sample = self.client.chat.create.return_value.sample
         self.record = ProcessingRecord(received_at=datetime.now(timezone.utc))
@@ -59,7 +63,7 @@ class WorkflowTests(unittest.TestCase):
         self.responses(self.corrected, self.clean)
         self.run_review()
         self.assertEqual(self.sample.call_count, 2)
-        self.assertEqual(self.route, ["read", "extract", "review", "validate"])
+        self.assertEqual(self.route, ["read", "extract", "review", "validate", "approve"])
         self.assertEqual(self.record.reviews[0].outcome, "passed")
         self.assertEqual(self.record.reviews[0].timestamp.utcoffset().total_seconds(), 0)
         self.assertTrue(all(call.kwargs["reasoning_effort"] == "low"

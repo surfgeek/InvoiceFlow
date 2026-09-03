@@ -1,10 +1,11 @@
 """Load and validate non-secret application settings from TOML."""
 
 import tomllib
+from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 
 DEFAULT_MODEL = "grok-4.6"
@@ -40,10 +41,31 @@ class CurrencySettings(SettingsModel):
     unqualified_dollar: DollarPolicy = Field(default_factory=DollarPolicy)
 
 
+class MockVPSettings(SettingsModel):
+    response: Literal["approved", "rejected", "pending"] = "pending"
+    reason: str = Field(default="Configured local mock VP response.", min_length=1)
+
+
+class ApprovalSettings(SettingsModel):
+    # Decimal strings in TOML avoid binary floating-point monetary limits.
+    limits: dict[Annotated[str, Field(pattern=r"^[A-Z]{3}$")],
+                 Annotated[Decimal, Field(strict=False, gt=0, allow_inf_nan=False)]] = Field(
+                     default_factory=lambda: {"USD": Decimal("10000")})
+    mock_vp: MockVPSettings = Field(default_factory=MockVPSettings)
+
+    @field_validator("limits", mode="before")
+    @classmethod
+    def require_decimal_strings(cls, value):
+        if isinstance(value, dict) and any(not isinstance(limit, (str, Decimal)) for limit in value.values()):
+            raise ValueError("approval limits must be quoted decimal strings")
+        return value
+
+
 class AppSettings(SettingsModel):
     model: ModelSettings = Field(default_factory=ModelSettings)
     batch: BatchSettings = Field(default_factory=BatchSettings)
     currency: CurrencySettings = Field(default_factory=CurrencySettings)
+    approval: ApprovalSettings = Field(default_factory=ApprovalSettings)
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppSettings:

@@ -1,8 +1,8 @@
 # InvoiceFlow
 
 InvoiceFlow uses Grok and LangGraph to extract invoice data, review it against the
-source, and validate it against a local SQLite inventory. It supports TXT, CSV,
-JSON, XML, Markdown, and text-based PDFs. Approval and payment are not yet implemented.
+source, validate it against a local SQLite inventory, and simulate approval and payment.
+It supports TXT, CSV, JSON, XML, Markdown, and text-based PDFs. No real funds are transferred.
 
 ## How to set up
 
@@ -46,8 +46,11 @@ outside the input folder.
 
 Processing uses paid API calls. Progress appears in the terminal; JSON results
 are written when the run finishes. Results include extracted data, validation
-issues, and review history. Exit code **0** means all checks passed; **1** means
-processing failed or validation blocked an invoice.
+issues, source-review history, and approval decisions in `processing.approval`.
+Simulated receipts appear in `processing.payment`, with the vendor, exact amount,
+currency, payment ID, and UTC timestamp. Exit code **0** means simulated payment
+completed; **1** means failed, blocked, rejected, or pending. Folder summaries count
+every result without a successful simulated payment under `failed`.
 
 Each run also writes a structured log under `logs/` and prints its path. Logs
 include stage timings, model usage, and errors, linked to results by run/invoice IDs.
@@ -74,6 +77,13 @@ workers = 4
 [currency.unqualified_dollar]
 action = "assume"
 currency = "USD"
+
+[approval.limits]
+USD = "10000"
+
+[approval.mock_vp]
+response = "pending"
+reason = "Configured local mock VP response."
 ```
 
 `timeout_seconds` applies per model call. `workers` controls concurrent invoices.
@@ -94,6 +104,21 @@ in the result. To block unqualified dollars instead, set `action = "reject"`;
 the `currency` setting is then ignored. An omitted dollar policy also rejects.
 Explicit currencies are never converted. Grok identifies the currency notation;
 Python applies the policy after source review.
+
+Approval limits are quoted decimal amounts, separately configured per currency.
+At or below the limit, a valid invoice is eligible for automatic approval after
+Grok's recommendation and critique. Above it, Grok must request the separate
+mock VP response: set `response` to `approved`, `rejected`, or `pending` and
+provide a `reason`. This setting applies to every above-limit invoice in the run;
+it simulates authorization, not a real person's decision. Python prevents Grok
+from overriding it. Unresolved critiques block approval after one correction.
+
+USD defaults to 10,000. To support another currency, add its limit under
+`[approval.limits]`, for example `EUR = "8000"`. No conversion occurs; a currency
+without a configured limit stays pending. Pending results do not wait or resume
+automatically; update configuration and rerun to exercise a different mock response.
+Each successful rerun produces a new simulated receipt. Duplicate-payment prevention
+and durable payment storage are not implemented.
 
 Optional command-line overrides:
 

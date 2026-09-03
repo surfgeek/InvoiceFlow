@@ -8,7 +8,10 @@ import unittest
 from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+from approval import ApprovalCritique
+from models import ApprovalDecision
 
 import main
 from setup_inventory import setup_inventory
@@ -41,10 +44,21 @@ class MainTests(unittest.TestCase):
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
-            client.return_value.__enter__.return_value.chat.create.return_value.sample.side_effect = [
+            source_responses = iter([
                 SimpleNamespace(content=value, finish_reason="REASON_STOP")
                 for value in (responses if responses is not None else [content, '{"findings":[]}'])
-            ]
+            ])
+            def create_chat(**kwargs):
+                schema = kwargs.get("response_format")
+                if schema is ApprovalDecision:
+                    value = SimpleNamespace(content='{"status":"approved","reason":"Within the configured limit."}',
+                                            finish_reason="REASON_STOP")
+                elif schema is ApprovalCritique:
+                    value = SimpleNamespace(content='{"findings":[]}', finish_reason="REASON_STOP")
+                else:
+                    value = next(source_responses)
+                return Mock(sample=Mock(return_value=value))
+            client.return_value.__enter__.return_value.chat.create.side_effect = create_chat
             code = main.main()
             self.validation_calls = validator.call_count
         return code, stdout.getvalue(), stderr.getvalue(), client
@@ -60,6 +74,10 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output)["invoice"]["vendor"], "Widgets Inc.")
         self.assertEqual(json.loads(output)["validation_issues"], [])
+        receipt = json.loads(output)["processing"]["payment"]
+        self.assertEqual(receipt["status"], "simulated_paid")
+        self.assertEqual(receipt["amount"], "5000")
+        self.assertEqual(receipt["currency"], "USD")
         self.assertTrue(error.startswith("Operational log:"))
         client.return_value.__exit__.assert_called_once()
 
@@ -133,7 +151,7 @@ class MainTests(unittest.TestCase):
         (folder / "b.txt").write_text("Invoice B", encoding="utf-8")
         (folder / "nested").mkdir()
         (folder / "nested" / "extra.txt").write_text("Nested invoice", encoding="utf-8")
-        invoice = json.dumps({"vendor": "Example", "amount": "10", "currency": "EUR",
+        invoice = json.dumps({"vendor": "Example", "amount": "10", "currency": "USD",
                               "due_date": "2026-02-01", "items": [{"name": "WidgetA", "quantity": "1"}]})
         code, output, error, client = self.run_cli(
             folder, folder=True, responses=["not JSON", invoice, '{"findings":[]}'],
@@ -157,7 +175,7 @@ class MainTests(unittest.TestCase):
         folder = self.make_folder()
         for name in ("a.txt", "b.txt"):
             (folder / name).write_text("invoice", encoding="utf-8")
-        invoices = [json.dumps({"vendor": vendor, "amount": "10", "currency": "EUR",
+        invoices = [json.dumps({"vendor": vendor, "amount": "10", "currency": "USD",
                                "due_date": "2026-02-01",
                                "items": [{"name": "WidgetA", "quantity": "1"}]})
                     for vendor in ("First", "Second")]
