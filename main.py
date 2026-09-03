@@ -22,6 +22,7 @@ from operational_logging import current_run_id, log_event, log_run
 from workflow import build_workflow
 from offline import OfflineClient
 from setup_inventory import OFFLINE_DATABASE_PATH
+from reporting import write_report
 
 
 OUTCOME_LABELS = {
@@ -60,7 +61,7 @@ def process_invoice(graph: CompiledStateGraph, path: Path) -> tuple[dict, int]:
     log_event("invoice_started", invoice_id=record.invoice_id, file_name=path.name)
     started = monotonic()
     result = graph.invoke({"invoice_path": path, "record": record})
-    output = {"processing": result["record"].model_dump(mode="json")}
+    output = {"invoice_path": str(path), "processing": result["record"].model_dump(mode="json")}
     if "invoice" in result:
         output["invoice"] = result["invoice"].model_dump(mode="json")
     if "validation_issues" in result:
@@ -111,6 +112,7 @@ def main() -> int:
     inputs.add_argument("--invoice_dir", type=Path, help="Process files directly in a folder, in filename order.")
     parser.add_argument("--workers", type=int, help="Override configured concurrent folder workers.")
     parser.add_argument("--offline", action="store_true", help="Replay bundled model fixtures locally; no API key or network calls.")
+    parser.add_argument("--report", type=Path, help="Create a new standalone HTML results report.")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="TOML configuration file.")
     parser.add_argument("--log_dir", type=Path, default=Path(__file__).resolve().parent / "logs",
                         help="Directory for per-run structured operational logs.")
@@ -136,6 +138,11 @@ def main() -> int:
             return 1
     else:
         paths = [args.invoice_path]
+    if args.report is not None:
+        if (args.report.suffix.lower() != ".html" or args.report.exists() or not args.report.parent.is_dir()
+                or (args.invoice_dir is not None and args.report.resolve().parent == args.invoice_dir.resolve())):
+            print("Choose a new .html report filename in an existing directory outside the input folder.", file=sys.stderr)
+            return 1
     api_key = ""
     if not args.offline:
         load_dotenv(Path(__file__).resolve().parent / ".env", encoding="utf-8-sig")
@@ -156,12 +163,21 @@ def main() -> int:
                                    reasoning_effort=settings.model.reasoning_effort,
                                    dollar_policy=settings.currency.unqualified_dollar,
                                    approval_settings=settings.approval,
+                                   inventory_aliases=settings.inventory.aliases,
                                    **({"database_path": OFFLINE_DATABASE_PATH} if args.offline else {}))
             if args.invoice_dir is None:
                 output, exit_code = process_invoice(graph, paths[0])
             else:
                 output = process_folder(graph, paths, workers)
                 exit_code = 0 if (output["summary"]["simulated_paid"] + output["summary"]["already_paid"]) == len(paths) else 1
+        if args.report is not None:
+            try:
+                write_report(output, args.report)
+                print(f"Report: {args.report.resolve()}", file=sys.stderr)
+            except OSError as error:
+                print(f"Could not write report: {error}. JSON results follow on stdout.", file=sys.stderr)
+                log_event("report_failed", error_type=type(error).__name__)
+                exit_code = 1
         log_event("run_result", exit_code=exit_code, file_count=len(paths))
         print(json.dumps(output, indent=2))
     return exit_code

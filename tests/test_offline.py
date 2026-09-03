@@ -26,13 +26,15 @@ class OfflineTests(unittest.TestCase):
         self.database = self.root / "offline.db"
         setup_inventory(self.database)
 
-    def run_cli(self, path, *, folder=False, settings=None):
+    def run_cli(self, path, *, folder=False, settings=None, report=None):
         args = ["main.py", "--offline", "--invoice_dir" if folder else "--invoice_path", str(path),
                 "--log_dir", str(self.root / "logs")]
         if settings:
             config = self.root / "config.toml"
             config.write_text(settings, encoding="utf-8")
             args.extend(["--config", str(config)])
+        if report is not None:
+            args.extend(["--report", str(report)])
         stdout, stderr = io.StringIO(), io.StringIO()
         with patch("sys.argv", args), patch.dict("os.environ", {}, clear=True), patch(
             "main.OFFLINE_DATABASE_PATH", self.database
@@ -63,10 +65,24 @@ class OfflineTests(unittest.TestCase):
     def test_all_bundled_formats_exercise_business_outcomes(self):
         code, result, _ = self.run_cli(ROOT / "data/invoices", folder=True)
         self.assertEqual(code, 1)
-        self.assertEqual(result["summary"], {"total": 20, "simulated_paid": 3, "already_paid": 1,
-            "payment_held": 1, "validation_blocked": 14, "pending_approval": 1,
+        self.assertEqual(result["summary"], {"total": 20, "simulated_paid": 5, "already_paid": 2,
+            "payment_held": 1, "validation_blocked": 11, "pending_approval": 1,
             "rejected": 0, "processing_error": 0})
         self.assertTrue(all(item["processing"]["mode"] == "offline" for item in result["results"]))
+
+    def test_aliases_preserve_source_and_appear_in_report(self):
+        path = ROOT / "data/invoices/invoice_1010.txt"
+        report = self.root / "result.html"
+        code, result, stderr = self.run_cli(path, report=report)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["invoice"]["items"][-1]["name"], "WidgetA (rush order)")
+        self.assertEqual(result["processing"]["reviews"][0]["invoice"]["items"][-1]["name"], "WidgetA (rush order)")
+        self.assertEqual(result["processing"]["inventory_aliases"], {"WidgetA (rush order)": "WidgetA"})
+        html = report.read_text(encoding="utf-8")
+        self.assertIn("Configured inventory matches", html)
+        self.assertIn("WidgetA (rush order) → WidgetA", html)
+        self.assertIn("Offline simulation", html)
+        self.assertIn("Report:", stderr)
 
     def test_vp_tool_response_controls_all_three_outcomes(self):
         for status, outcome in (("pending", "pending_approval"), ("rejected", "rejected"), ("approved", "simulated_paid")):

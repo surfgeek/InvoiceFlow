@@ -20,7 +20,7 @@ from operational_logging import log_event, logging_context
 from payment import PaymentError, PaymentHold, lookup_payment, pay_invoice
 from setup_inventory import DATABASE_PATH
 from source_review import review_invoice
-from validation import InventoryValidationError, validate_invoice
+from validation import InventoryValidationError, resolve_inventory_aliases, validate_invoice
 
 
 class WorkflowState(TypedDict, total=False):
@@ -76,7 +76,8 @@ def guarded(node: Callable[[WorkflowState], WorkflowState],
 def build_workflow(client: Client, model: str = DEFAULT_MODEL,
                    database_path: str | Path = DATABASE_PATH, *,
                    reasoning_effort: str = "low", dollar_policy: DollarPolicy | None = None,
-                   approval_settings: ApprovalSettings | None = None):
+                   approval_settings: ApprovalSettings | None = None,
+                   inventory_aliases: dict[str, str] | None = None):
     """Compile a sequential graph with at most one source-correction detour."""
     def read(state: WorkflowState) -> WorkflowState:
         state["record"].mode = "offline" if getattr(client, "is_offline", False) is True else "live"
@@ -129,7 +130,11 @@ def build_workflow(client: Client, model: str = DEFAULT_MODEL,
         state["record"].currency_assumption = assumption
         if assumption:
             log_event("currency_assumed", currency=invoice.currency, policy="unqualified_dollar")
-        issues = validate_invoice(invoice, database_path)
+        matched, used = resolve_inventory_aliases(invoice, database_path, inventory_aliases or {})
+        state["record"].inventory_aliases = used
+        if used:
+            log_event("inventory_aliases_applied", count=len(used))
+        issues = validate_invoice(matched, database_path)
         add_event(state["record"], "validation", "failed" if issues else "completed",
                   "; ".join(issues) if issues else None)
         return {"invoice": invoice, "validation_issues": issues}

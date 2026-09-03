@@ -45,6 +45,9 @@ Setup never resets the ledger.
 
 Remove `--offline` to use actual Grok on these or other supported documents.
 Both modes return structured JSON on stdout and progress/log locations on stderr.
+Add `--report=results.html` to open the results in any browser, including offline.
+The report lists outcomes and reasons, with expandable source findings, configured
+item matches, approval responses, payment receipts, and stage timestamps.
 The full folder includes deliberately blocked invoices, so exit code 1 is expected.
 
 ## What the implementation demonstrates
@@ -57,11 +60,12 @@ The full folder includes deliberately blocked invoices, so exit code 1 is expect
 | Shipping mindset | Local CLI and mock services; bounded loops and concurrency. No bank integration, approval inbox, or revision reconciliation. |
 | Presentation | Reasons, source discrepancies, UTC events, and payment receipts explain each decision. Deterministic controls prevent model recommendations from bypassing authorization. |
 | Above/beyond | Reader plugins, configurable currency policy, concurrent batches, and persistent duplicate protection address concrete input and operational issues. |
-| UI/UX | One-file/folder commands, explicit mode labels, distinct outcome labels, actionable errors, and concise setup instructions. The interface is a CLI, not a graphical dashboard. |
+| UI/UX | One-file/folder commands, explicit mode labels, distinct outcome labels, actionable errors, and an optional browser-readable HTML report. No dashboard server is required. |
 
 ## Limits to explain honestly
 
-- Inventory matching is exact; `Widget A` does not resolve to `WidgetA`.
+- Inventory matching uses exact names plus explicit configured aliases, including
+  `Widget A` → `WidgetA`. Other variations remain unknown; no fuzzy matching is used.
 - Missing currencies remain blocked; currencies without an approval limit remain pending.
 - Duplicate matching depends on extracted vendor/number and compared fields. It
   does not resolve vendor aliases or reconcile revisions. The first successful

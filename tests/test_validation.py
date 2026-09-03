@@ -9,7 +9,7 @@ from pathlib import Path
 
 from models import Invoice, InvoiceItem
 from setup_inventory import setup_inventory
-from validation import InventoryValidationError, validate_invoice
+from validation import InventoryValidationError, resolve_inventory_aliases, validate_invoice
 
 
 class ValidationTests(unittest.TestCase):
@@ -34,6 +34,30 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(connection.execute(
                 "SELECT stock FROM inventory WHERE item='WidgetA'"
             ).fetchone()[0], 15)
+
+    def test_alias_quantities_combine_with_canonical_stock(self):
+        self.invoice.items = [InvoiceItem(name="WidgetA", quantity="10"), InvoiceItem(name="Widget A", quantity="6")]
+        matched, used = resolve_inventory_aliases(self.invoice, self.database, {"Widget A": "WidgetA"})
+        self.assertEqual(validate_invoice(matched, self.database), ["Insufficient stock for WidgetA: 15 available."])
+        self.assertEqual(used, {"Widget A": "WidgetA"})
+        self.assertEqual(self.invoice.items[1].name, "Widget A")
+
+    def test_alias_cannot_redirect_existing_zero_stock_item(self):
+        self.invoice.items = [InvoiceItem(name="FakeItem", quantity="1")]
+        matched, used = resolve_inventory_aliases(self.invoice, self.database, {"FakeItem": "WidgetA"})
+        self.assertEqual(validate_invoice(matched, self.database), ["Insufficient stock for FakeItem: 0 available."])
+        self.assertEqual(used, {})
+
+    def test_missing_alias_target_is_configuration_error(self):
+        self.invoice.items = [InvoiceItem(name="Widget A", quantity="1")]
+        with self.assertRaisesRegex(InventoryValidationError, "alias target"):
+            resolve_inventory_aliases(self.invoice, self.database, {"Widget A": "Typo"})
+
+    def test_unconfigured_names_still_fail_exact_matching(self):
+        self.invoice.items = [InvoiceItem(name="widgeta", quantity="1")]
+        matched, used = resolve_inventory_aliases(self.invoice, self.database, {"Widget A": "WidgetA"})
+        self.assertEqual(validate_invoice(matched, self.database), ["Unknown inventory item: widgeta."])
+        self.assertEqual(used, {})
 
     def test_repeated_lines_exceed_stock(self):
         self.invoice.items *= 2

@@ -73,6 +73,11 @@ Process a folder and save the results:
 .\.venv\Scripts\python main.py --offline --invoice_path=data/offline_demo/high_value.txt
 ```
 
+Add `--report=results.html` to any run for a standalone, browser-readable report
+with outcome counts, reasons, configured matches, and expandable audit history.
+Choose a new filename outside the input folder; existing files are not overwritten.
+JSON output is still available, and the report needs no internet connection.
+
 Offline mode uses scripted model responses for unchanged bundled invoices. It
 exercises the real readers, graph, SQLite checks, approval tool, and payment ledger;
 it does **not** perform LLM reasoning. Invoice 1001 includes a deliberate extraction
@@ -126,6 +131,11 @@ timeout_seconds = 60
 [batch]
 workers = 4
 
+[inventory.aliases]
+"Widget A" = "WidgetA"
+"Gadget X" = "GadgetX"
+"WidgetA (rush order)" = "WidgetA"
+
 [currency.unqualified_dollar]
 action = "assume"
 currency = "USD"
@@ -140,6 +150,14 @@ reason = "Configured local mock VP response."
 
 `timeout_seconds` applies per model call. `workers` controls concurrent invoices.
 Keep secrets in `.env`. Invalid configuration stops processing before any API calls.
+
+`inventory.aliases` maps exact source names to existing inventory names. The three
+entries above ship with the app; add or remove entries as needed. Omit the section
+to use exact matching only. Existing inventory names always take precedence;
+aliases cannot redirect an existing zero-stock item. Quantities from aliases and
+canonical names are combined for stock checks. The result preserves source names
+and records applied mappings in `processing.inventory_aliases`. No fuzzy matching
+or recursive alias chaining is used. An applied alias with an unknown target fails.
 
 An **unqualified dollar** is `$` attached to an invoice amount with no clear
 currency identifier elsewhere in the document. For example:
