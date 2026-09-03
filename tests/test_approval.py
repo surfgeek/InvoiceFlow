@@ -183,6 +183,8 @@ class ApprovalTests(unittest.TestCase):
                             contextlib.redirect_stderr(io.StringIO()):
                         output, code = process_invoice(graph, Path("invoice.txt"))
                     self.assertEqual(code, 0 if status == "approved" else 1)
+                    self.assertEqual(output["outcome"], {"approved": "simulated_paid", "pending": "pending_approval",
+                        "rejected": "rejected", "failed": "processing_error", "invalid": "validation_blocked"}[status])
                     audit = output["processing"]["approval"]
                     if status == "invalid":
                         self.assertIsNone(audit)

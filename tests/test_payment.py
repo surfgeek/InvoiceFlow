@@ -60,6 +60,7 @@ class PaymentTests(unittest.TestCase):
         ) as payment, contextlib.redirect_stderr(io.StringIO()):
             output, code = process_invoice(graph, Path("invoice.txt"))
         self.assertEqual(code, 1)
+        self.assertEqual(output["outcome"], "processing_error")
         self.assertEqual(output["processing"]["approval"]["status"], "approved")
         self.assertIsNone(output["processing"]["payment"])
         self.assertEqual(output["error"], "Simulated payment failed.")

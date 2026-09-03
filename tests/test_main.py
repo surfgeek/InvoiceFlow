@@ -161,10 +161,11 @@ class MainTests(unittest.TestCase):
         self.assertEqual([Path(item["invoice_path"]).name for item in result["results"]],
                          ["a.unsupported", "b.txt", "c.txt"])
         self.assertEqual([item["exit_code"] for item in result["results"]], [1, 1, 0])
-        self.assertEqual(result["summary"], {"total": 3, "passed": 1, "failed": 2})
+        self.assertEqual(result["summary"], {"total": 3, "simulated_paid": 1, "processing_error": 2,
+                                            "pending_approval": 0, "rejected": 0, "validation_blocked": 0})
         self.assertIn("[1/3] Processing a.unsupported...", error)
-        self.assertIn("[1/3] Failed: a.unsupported", error)
-        self.assertIn("[3/3] Passed: c.txt", error)
+        self.assertIn("[1/3] Processing error: a.unsupported", error)
+        self.assertIn("[3/3] Simulated paid: c.txt", error)
         self.assertIn("a.unsupported", error)
         self.assertIn("b.txt", error)
         self.assertEqual(self.validation_calls, 1)
@@ -185,8 +186,9 @@ class MainTests(unittest.TestCase):
         result = json.loads(output)
         self.assertEqual(code, 0)
         self.assertIn("[1/2] Processing a.txt...", error)
-        self.assertIn("[2/2] Passed: b.txt", error)
-        self.assertEqual(result["summary"], {"total": 2, "passed": 2, "failed": 0})
+        self.assertIn("[2/2] Simulated paid: b.txt", error)
+        self.assertEqual(result["summary"], {"total": 2, "simulated_paid": 2, "processing_error": 0,
+                                            "pending_approval": 0, "rejected": 0, "validation_blocked": 0})
         self.assertEqual([item["processing"]["reviews"][0]["invoice"]["vendor"]
                           for item in result["results"]], ["First", "Second"])
         self.assertTrue(all(len(item["processing"]["reviews"]) == 1 for item in result["results"]))
@@ -221,13 +223,13 @@ class MainTests(unittest.TestCase):
 
         def process(graph, path):
             barrier.wait()  # Both jobs must start before either can finish.
-            return {"invoice": {"vendor": path.stem}}, 0
+            return {"invoice": {"vendor": path.stem}, "outcome": "simulated_paid"}, 0
 
         with patch("main.process_invoice", side_effect=process), contextlib.redirect_stderr(io.StringIO()):
             result = main.process_folder(None, [Path("a.txt"), Path("b.txt")], workers=2)
         self.assertEqual([item["invoice"]["vendor"] for item in result["results"]], ["a", "b"])
         self.assertTrue(all(item["elapsed_seconds"] >= 0 for item in result["results"]))
-        self.assertEqual(result["summary"]["passed"], 2)
+        self.assertEqual(result["summary"]["simulated_paid"], 2)
 
     def test_nonpositive_workers_are_rejected(self):
         for workers in ("0", "-1"):
@@ -235,7 +237,18 @@ class MainTests(unittest.TestCase):
                 "main.py", "--invoice_dir", ".", "--workers", workers,
             ]), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
                 main.main()
-            self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_folder_reports_each_business_outcome_separately(self):
+        outcomes = list(main.OUTCOME_LABELS)
+        responses = [({"outcome": outcome}, 0 if outcome == "simulated_paid" else 1) for outcome in outcomes]
+        stderr = io.StringIO()
+        with patch("main.process_invoice", side_effect=responses), contextlib.redirect_stderr(stderr):
+            result = main.process_folder(None, [Path(f"{index}.txt") for index in range(5)], workers=1)
+        self.assertEqual(result["summary"], {"total": 5, **{outcome: 1 for outcome in outcomes}})
+        self.assertEqual([item["outcome"] for item in result["results"]], outcomes)
+        for label in main.OUTCOME_LABELS.values():
+            self.assertIn(f"{label}:", stderr.getvalue())
 
     def test_configured_dollar_policy_controls_single_invoice_outcome(self):
         path = Path(__file__).resolve().parents[1] / "data/invoices/invoice_1001.txt"

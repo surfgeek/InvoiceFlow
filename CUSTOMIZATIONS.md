@@ -20,7 +20,8 @@ The CLI adds `--invoice_dir` alongside the assessment's single-file option.
 Files directly in the folder run with four concurrent workers by default
 (configurable with `--workers`) and independent processing histories. Results
 retain filename order and include elapsed time per file. Expected per-file failures do not stop the batch. Output
-contains per-file results and summary counts. Recursive discovery, duplicate
+contains per-file results and separate counts for simulated payment, pending approval,
+rejection, validation blocks, and processing errors. Recursive discovery, duplicate
 invoice detection, and automatic comparison with expected answers are not implemented.
 
 ### Agreed validation policies

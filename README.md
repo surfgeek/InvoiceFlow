@@ -49,8 +49,9 @@ are written when the run finishes. Results include extracted data, validation
 issues, source-review history, and approval decisions in `processing.approval`.
 Simulated receipts appear in `processing.payment`, with the vendor, exact amount,
 currency, payment ID, and UTC timestamp. Exit code **0** means simulated payment
-completed; **1** means failed, blocked, rejected, or pending. Folder summaries count
-every result without a successful simulated payment under `failed`.
+completed; **1** means failed, blocked, rejected, or pending. Each result has an
+`outcome`: `simulated_paid`, `pending_approval`, `rejected`, `validation_blocked`,
+or `processing_error`. Folder summaries count each outcome separately.
 
 Each run also writes a structured log under `logs/` and prints its path. Logs
 include stage timings, model usage, and errors, linked to results by run/invoice IDs.
