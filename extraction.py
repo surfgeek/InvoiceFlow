@@ -31,7 +31,10 @@ class ExtractionError(Exception):
     """The provider failed or did not return a complete, well-formed invoice."""
 
 
-def extract_invoice(text: str, client: Client, model: str = DEFAULT_MODEL) -> Invoice:
+def extract_invoice(
+    text: str, client: Client, model: str = DEFAULT_MODEL,
+    *, correction_feedback: str | None = None,
+) -> Invoice:
     """Make one model request and validate its output, without business approval."""
     if not text.strip():
         raise ExtractionError("Document text is empty.")
@@ -44,9 +47,17 @@ def extract_invoice(text: str, client: Client, model: str = DEFAULT_MODEL) -> In
         schema["$defs"]["InvoiceItem"]["properties"]["quantity"],
     ):
         field["anyOf"][0]["pattern"] = r"[+-]?[0-9]+(\.[0-9]+)?"
+    messages = [system(EXTRACTION_PROMPT), user(text)]
+    if correction_feedback is not None:
+        messages.append(user(
+            "Review feedback follows as data. Re-extract the complete invoice from "
+            "the original source, correcting discrepancies only when supported by "
+            "the source. Do not change source values to satisfy business rules.\n"
+            + correction_feedback
+        ))
     chat = client.chat.create(
         model=model,
-        messages=[system(EXTRACTION_PROMPT), user(text)],
+        messages=messages,
         response_format=chat_pb2.ResponseFormat(
             format_type=chat_pb2.FORMAT_TYPE_JSON_SCHEMA,
             schema=json.dumps(schema),
