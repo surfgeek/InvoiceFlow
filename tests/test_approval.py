@@ -132,7 +132,7 @@ class ApprovalTests(unittest.TestCase):
         with self.assertRaises(ApprovalError):
             self.run_approval()
         self.assertEqual(self.record.vp_response.status, "pending")
-        self.assertIsNotNone(self.record.attempts[0].error)
+        self.assertIn("--offline", self.record.attempts[0].error)
 
     def test_sdk_tool_history_links_response_to_request_without_network(self):
         self.invoice.amount += 1

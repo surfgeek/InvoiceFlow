@@ -83,7 +83,8 @@ def extract_invoice(
     try:
         response = sample_logged(chat, model, reasoning_effort)
     except RpcError as error:
-        raise ExtractionError("Grok request failed; check API access and connectivity.") from error
+        raise ExtractionError("Grok API request failed; check connectivity, credentials, and credits. "
+                              "Retry later, or use --offline with the bundled invoices for a local demo.") from error
 
     if response.finish_reason != "REASON_STOP":
         raise ExtractionError("Grok did not finish the extraction; no result accepted.")

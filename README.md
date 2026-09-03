@@ -1,126 +1,103 @@
 # InvoiceFlow
 
-InvoiceFlow uses Grok and LangGraph to extract invoice data, review it against the
-source, validate it against a local SQLite inventory, and simulate approval and payment.
-It supports TXT, CSV, JSON, XML, Markdown, and text-based PDFs. No real funds are transferred.
-Live mode uses Grok; offline mode replays explicit demo fixtures through the same
-workflow. See the [demo walkthrough](docs/DEMO.md) for scenarios and business impact.
+Extract invoice data, validate inventory, obtain simulated approval, and record
+simulated payments. Live mode uses Grok and LangGraph; offline mode uses scripted
+model responses through the same workflow. No real funds are transferred.
+
+Supported inputs: TXT, CSV, JSON, XML, Markdown, and text-based PDF. See the
+[demo walkthrough](docs/DEMO.md) for scenarios, audit details, and limitations.
 
 ## How to set up
 
-You need Python 3.12. Install dependencies before disconnecting from the internet:
+You need **Python 3.12** and Git. Install dependencies while connected to the internet:
 
 ```powershell
+git clone https://github.com/surfgeek/InvoiceFlow.git
+cd InvoiceFlow
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-**Install the required database schema and seed inventory before running the app:**
+Run all remaining commands from this repository folder. Examples use Windows paths;
+on macOS/Linux, replace `.\.venv\Scripts\python` with `.venv/bin/python`.
+
+**Create the required database before running the app:**
 
 ```powershell
 .\.venv\Scripts\python setup_inventory.py
 ```
 
-For the offline demo, use this instead (or run both to use both modes):
+This single setup command initializes inventory stock (WidgetA 15, WidgetB 10,
+GadgetX 5, FakeItem 0) and payment ledgers in `inventory.db` and `offline.db`.
+Both belong to the same application; separate histories keep offline demo payments
+out of live runs. SQLite is included with Python. Rerunning setup preserves records.
 
-```powershell
-.\.venv\Scripts\python setup_inventory.py --offline
-```
-
-Python includes SQLite; no separate database server is needed. This command creates
-`inventory.db` for live mode, or `offline.db` for offline mode, beside the script with:
-
-- `inventory`: validation stock—WidgetA 15, WidgetB 10, GadgetX 5, FakeItem 0.
-- `payments`: saved simulated receipts and invoice identities for duplicate checks.
-
-Run the same command after upgrading an existing installation to add the payment
-table. It preserves existing stock and payment records. The app requires these
-tables; copying the code alone is not enough. Earlier receipts in log files are
-not imported into the new ledger.
-
-**Live mode only:** get an xAI API key with credits and create `.env` beside `main.py`:
+**For normal processing with Grok**, put an xAI API key with credits in `.env` beside `main.py`:
 
 ```dotenv
 XAI_API_KEY=your-api-key
 ```
 
-Offline mode needs no API key, does not read `.env`, and makes no network calls.
-The key and generated databases are excluded from Git. Keep each database between
-runs to retain its payment history; offline receipts cannot affect live runs.
-
-Commands below use Windows paths. On macOS/Linux, use `.venv/bin/python` instead
-of `.\.venv\Scripts\python`.
+Offline mode needs no key or network access at runtime. Live mode uses paid API
+calls. The two databases keep payment histories separate; retain them between runs.
+Keys, databases, and operational logs are excluded from Git.
 
 ## How to run from the command line
 
-Process one invoice with live Grok:
+**Start here: process the provided invoices and create a readable report.**
 
 ```powershell
-.\.venv\Scripts\python main.py --invoice_path=data/invoices/invoice_1001.txt
+.\.venv\Scripts\python main.py --invoice_dir=data/invoices --report=results.html > results.json
 ```
 
-Process a folder and save the results:
+Open `results.html` in your browser. It shows outcomes, reasons, and expandable
+evidence. Progress and a summary appear in the terminal; detailed JSON is saved
+when the run finishes. Each run also prints the path to its operational log.
+
+The samples deliberately include invalid invoices, so **exit code 1 is expected**
+for the full folder. Completed payments become `already_paid` on subsequent runs.
+Use a new report filename when rerunning; existing reports are not overwritten.
+
+Other examples:
 
 ```powershell
-.\.venv\Scripts\python main.py --invoice_dir=data/invoices > batch-results.json
-```
-
-**Offline demo — no internet or API charges:**
-
-```powershell
+# One invoice, offline
 .\.venv\Scripts\python main.py --offline --invoice_path=data/invoices/invoice_1001.txt
-.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices > offline-results.json
-.\.venv\Scripts\python main.py --offline --invoice_path=data/offline_demo/high_value.txt
-```
 
-Add `--report=results.html` to any run for a standalone, browser-readable report
-with outcome counts, reasons, configured matches, and expandable audit history.
-Choose a new filename outside the input folder; existing files are not overwritten.
-JSON output is still available, and the report needs no internet connection.
+# Offline demo of the provided folder, with a report
+.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --report=offline-results.html > offline-results.json
 
-Offline mode uses scripted model responses for unchanged bundled invoices. It
-exercises the real readers, graph, SQLite checks, approval tool, and payment ledger;
-it does **not** perform LLM reasoning. Invoice 1001 includes a deliberate extraction
-mistake that its scripted review detects and corrects. The high-value example
-requests the configured mock VP response (pending by default).
+# Your own folder of supported invoices (live Grok)
+.\.venv\Scripts\python main.py --invoice_dir="C:/Invoices"
 
-Input text is checked against fixture hashes. Renamed copies work; new or edited
-documents fail clearly instead of receiving canned answers. Use live mode for those.
-The terminal, `processing.mode`, and simulation log events identify offline runs.
-
-Folder runs process files concurrently, skip subfolders, and continue after
-individual failures. Results remain in filename order. Keep the output file
-outside the input folder.
-
-Live processing uses paid API calls. Progress appears in the terminal; JSON results
-are written when the run finishes. Results include extracted data, validation
-issues, source-review history, and approval decisions in `processing.approval`.
-Simulated receipts appear in `processing.payment`, with the vendor, exact amount,
-currency, payment ID, and UTC timestamp. Exit code **0** means simulated payment
-completed or was already recorded; **1** means failed, blocked, rejected, pending,
-or held for review. Each result has an
-`outcome`: `simulated_paid`, `pending_approval`, `rejected`, `validation_blocked`,
-`processing_error`, `already_paid`, or `payment_held`. Folder summaries count each outcome separately.
-
-Duplicate checks use the source-reviewed vendor and invoice number. A matching
-paid invoice reuses its original receipt without another payment. Changed details
-under that identity, or a missing invoice number, hold payment for review; the
-reason appears in `processing.payment_hold`. There is no review inbox or automatic
-revision reconciliation. If original and revised copies arrive together, the first
-successful payment is recorded and a differing copy is held.
-
-Each run also writes a structured log under `logs/` and prints its path. Logs
-include stage timings, model usage, and errors, linked to results by run/invoice IDs.
-
-Run automated tests without API calls:
-
-```powershell
+# Automated tests; no API calls
 .\.venv\Scripts\python -m unittest discover -s tests -v
 ```
 
+Offline mode recognizes unchanged bundled invoice text, including renamed copies
+with supported formats. It does **not** perform LLM reasoning or parse new documents.
+Use live mode for new or edited inputs. Results explicitly identify the mode.
+
+If a Grok API request fails, the affected invoice stops with an error and suggests
+`--offline` for a local demo of bundled invoices. The app never switches modes
+automatically. Retry live processing when API access is restored.
+
+Folder processing is concurrent and nonrecursive. Handled per-invoice failures
+do not stop the batch. Keep JSON and HTML output outside the input folder.
+Exit code 0 means every invoice was paid in simulation or already recorded;
+1 indicates a blocked, pending, rejected, held, or failed result, or a report-write failure.
+
+| If you see… | What to do |
+| --- | --- |
+| Missing database/schema | Run `python setup_inventory.py` to initialize both databases. |
+| Missing API key | Set `XAI_API_KEY` in `.env`, or use `--offline`. |
+| No offline fixture | Use an unchanged bundled invoice or remove `--offline` for live extraction. |
+| Report filename rejected | Choose a new `.html` filename in an existing directory outside the input folder. |
+| Validation block or payment hold | Read the reason in the report. These are business outcomes, not necessarily API failures. |
+
 ## How to configure
 
-Edit [config.toml](config.toml). Changes apply on the next run.
+Edit [config.toml](config.toml); changes apply on the next run. The shipped settings are:
 
 ```toml
 [model]
@@ -148,56 +125,34 @@ response = "pending"
 reason = "Configured local mock VP response."
 ```
 
-`timeout_seconds` applies per model call. `workers` controls concurrent invoices.
-Keep secrets in `.env`. Invalid configuration stops processing before any API calls.
+- **Model and concurrency:** timeout is per model call; workers controls concurrent
+  invoices. Offline mode uses fixtures instead of the configured model.
+- **Inventory aliases:** map exact source names to existing inventory items. Existing
+  inventory names take precedence; matched quantities are combined. Original names
+  and applied mappings remain in the audit record. Omit this section for exact matching only.
+- **Currency:** an *unqualified dollar* is `$` attached to an invoice amount with no
+  clear currency identifier elsewhere in the document. `assume` applies the configured
+  currency; set `action = "reject"` to block instead. Missing or conflicting currencies
+  never receive this fallback. Explicit USD, CAD, EUR, etc. are preserved without conversion.
+- **Approval:** amounts at or below the currency's limit are eligible for automatic
+  approval after review and critique. Higher amounts require the configured mock VP
+  response: `approved`, `rejected`, or `pending`. Supply a reason. It applies to all
+  above-limit invoices in that run and represents simulated authorization.
+- **Other currencies:** add a quoted limit such as `EUR = "8000"` under
+  `[approval.limits]`. Without a limit, that currency remains pending. Pending invoices
+  do not resume automatically; change configuration and rerun when appropriate.
 
-`inventory.aliases` maps exact source names to existing inventory names. The three
-entries above ship with the app; add or remove entries as needed. Omit the section
-to use exact matching only. Existing inventory names always take precedence;
-aliases cannot redirect an existing zero-stock item. Quantities from aliases and
-canonical names are combined for stock checks. The result preserves source names
-and records applied mappings in `processing.inventory_aliases`. No fuzzy matching
-or recursive alias chaining is used. An applied alias with an unknown target fails.
+Malformed settings stop startup. Alias targets are checked against inventory during
+processing. Keep secrets in `.env`.
 
-An **unqualified dollar** is `$` attached to an invoice amount with no clear
-currency identifier elsewhere in the document. For example:
-
-| Invoice text | Treatment |
-| --- | --- |
-| `$5,000` alone | Apply the configured dollar policy. |
-| `US$5,000` or `$5,000` with `Currency: USD` | Preserve explicit USD. |
-| `CAD 5,000`, `CA$5,000`, or `EUR 5,000` | Preserve the explicit currency. |
-| No currency indication, or conflicting declarations | Block; do not assume a currency. |
-
-`action = "assume"` applies the configured currency and records the assumption
-in the result. To block unqualified dollars instead, set `action = "reject"`;
-the `currency` setting is then ignored. An omitted dollar policy also rejects.
-Explicit currencies are never converted. Grok identifies the currency notation;
-Python applies the policy after source review.
-
-Approval limits are quoted decimal amounts, separately configured per currency.
-At or below the limit, a valid invoice is eligible for automatic approval after
-Grok's recommendation and critique. Above it, Grok must request the separate
-mock VP response: set `response` to `approved`, `rejected`, or `pending` and
-provide a `reason`. This setting applies to every above-limit invoice in the run;
-it simulates authorization, not a real person's decision. Python prevents Grok
-from overriding it. Unresolved critiques block approval after one correction.
-
-USD defaults to 10,000. To support another currency, add its limit under
-`[approval.limits]`, for example `EUR = "8000"`. No conversion occurs; a currency
-without a configured limit stays pending. Pending results do not wait or resume
-automatically; update configuration and rerun to exercise a different mock response.
-Already-paid copies skip approval after validation. Payment receipts persist in
-SQLite; complete processing histories still appear in the CLI results and logs.
-
-Optional command-line overrides:
+Optional overrides:
 
 ```powershell
-.\.venv\Scripts\python main.py --invoice_dir=data/invoices --workers=2 --config=config.toml --log_dir=logs
+.\.venv\Scripts\python main.py --offline --invoice_dir=data/invoices --workers=2 --config=config.toml --log_dir=logs
 ```
 
-`--workers` overrides the configured worker count. If set, `XAI_MODEL` overrides
+`--workers` overrides the worker count. In live mode, `XAI_MODEL` overrides
 `model.name`; environment variables take precedence over `.env`.
 
-See [reader plugins](reader_plugins/README.md) to add file formats and
-[CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) for project-specific behavior.
+See [reader plugins](reader_plugins/README.md) to add formats and
+[CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) for deliberate project-specific policies.

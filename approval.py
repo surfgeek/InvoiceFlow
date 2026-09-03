@@ -41,7 +41,8 @@ def sample(chat, model, reasoning_effort):
     try:
         return sample_logged(chat, model, reasoning_effort)
     except RpcError as error:
-        raise ApprovalError("Approval model request failed.") from error
+        raise ApprovalError("Grok API approval request failed. Retry when API access is restored, "
+                            "or use --offline with the bundled invoices for a local demo.") from error
 
 
 def structured_call(client, model, reasoning_effort, messages, schema):

@@ -113,7 +113,7 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(ExtractionError):
             self.run_review()
         self.assertEqual(self.record.reviews[1].outcome, "failed")
-        self.assertIsNotNone(self.record.reviews[1].error)
+        self.assertIn("--offline", self.record.reviews[1].error)
         self.assertEqual(self.record.reviews[0].findings[0].resolution, "unresolved")
 
     def test_unknown_source_is_retained(self):
