@@ -82,6 +82,11 @@ class UiTests(unittest.TestCase):
             ui.start_run(str(self.root / "missing"))
         self.assertEqual(ui.RUNS, {})
 
+    def test_live_page_uses_expandable_per_invoice_details(self):
+        self.assertIn("document.createElement('details')", ui.HTML)
+        self.assertIn("View errors and details", ui.HTML)
+        self.assertNotIn("validation_issues||[]).join('; ')", ui.HTML)
+
 
 if __name__ == "__main__":
     unittest.main()
