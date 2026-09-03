@@ -32,6 +32,18 @@ RUNS: dict[str, dict] = {}
 RUNS_LOCK = threading.Lock()
 
 
+def configured_api_key() -> str:
+    """Load the local configuration and return the effective key without exposing it."""
+    load_dotenv(ROOT / ".env", encoding="utf-8-sig")
+    return os.getenv("XAI_API_KEY", "").strip()
+
+
+def runtime_message() -> str:
+    if configured_api_key():
+        return "Live Grok mode is configured. If the API becomes unavailable, processing will continue offline."
+    return "No xAI API key was detected. Processing will continue in offline mode using bundled fixtures."
+
+
 def make_graph(client, settings, *, offline: bool):
     return build_workflow(
         client,
@@ -62,12 +74,12 @@ def run_invoices(run_id: str, directory: Path) -> None:
         if not paths:
             raise ValueError("The selected directory contains no files.")
         update_run(run_id, status="running", total=len(paths))
-        load_dotenv(ROOT / ".env", encoding="utf-8-sig")
-        api_key = os.getenv("XAI_API_KEY", "").strip()
+        api_key = configured_api_key()
         fallback_active = threading.Event()
         if not api_key:
             fallback_active.set()
-            add_notice(run_id, "No xAI API key was found. Continuing with offline fixtures.")
+            update_run(run_id, mode="offline")
+            add_notice(run_id, "Offline mode activated: no xAI API key was found. Continuing with bundled fixtures.")
 
         with log_run(ROOT / "logs") as (_, log_path), ExitStack() as stack:
             update_run(run_id, log_path=str(log_path))
@@ -84,6 +96,7 @@ def run_invoices(run_id: str, directory: Path) -> None:
                 error = result.get("error", "")
                 if result["outcome"] == "processing_error" and "Grok API" in error:
                     fallback_active.set()
+                    update_run(run_id, mode="offline")
                     add_notice(run_id, "The Grok API became unavailable. Retrying affected invoices and continuing offline.")
                     result, code = process_invoice(offline_graph, path)
                     result["recovery"] = "Retried offline after the Grok API request failed."
@@ -126,7 +139,7 @@ body{margin:0;background:#f3f6fa;color:#172538;font:16px/1.5 system-ui,sans-seri
 label{display:block;font-weight:700;margin-bottom:6px}.row{display:flex;gap:10px}input{flex:1;padding:11px;border:1px solid #aebbc9;border-radius:7px}button,a.button{background:#285579;color:#fff;border:0;border-radius:7px;padding:11px 16px;cursor:pointer;text-decoration:none}
 button:disabled{opacity:.5}.notice{background:#fff3cd}.progress{height:10px;background:#dbe3eb;border-radius:8px;overflow:hidden}.bar{height:100%;background:#287a63;width:0;transition:width .25s}.meta{color:#52647a;font-size:14px}.badge{display:inline-block;padding:3px 9px;border-radius:6px;background:#e8eef5;font-size:13px;font-weight:700}.simulated_paid,.already_paid{background:#dcf3e7;color:#18583c}.pending_approval,.payment_held{background:#fff0cc;color:#725000}.processing_error,.rejected,.validation_blocked{background:#fce4e4;color:#832b2b}details{margin-top:14px}summary{cursor:pointer;color:#285579;font-weight:700}details li{margin:6px 0}
 </style></head><body><main><div class="eyebrow">ACME CORP · INVOICEFLOW</div><h1>Process invoices</h1><p>Select a local directory. Results appear as each invoice completes.</p>
-<section class="panel"><label for="directory">Invoice directory</label><div class="row"><input id="directory" value="__DEFAULT__"><button id="browse" type="button">Browse</button><button id="run" type="button">Process</button></div></section>
+<div class="notice" id="runtime">__RUNTIME__</div><section class="panel"><label for="directory">Invoice directory</label><div class="row"><input id="directory" value="__DEFAULT__"><button id="browse" type="button">Browse</button><button id="run" type="button">Process</button></div></section>
 <section id="status" hidden><p id="statusText"></p><div class="progress"><div class="bar" id="bar"></div></div><div id="notices"></div><div id="results"></div><p><a class="button" id="report" hidden>Open completed report</a></p></section>
 <script>
 const q=id=>document.getElementById(id); let timer, shown=0;
@@ -147,7 +160,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/":
-            body = HTML.replace("__DEFAULT__", escape(str(DEFAULT_INVOICE_DIR), quote=True)).encode()
+            body = HTML.replace("__DEFAULT__", escape(str(DEFAULT_INVOICE_DIR), quote=True)).replace(
+                "__RUNTIME__", escape(runtime_message())
+            ).encode()
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body); return
         if path.startswith("/api/runs/"):
@@ -196,6 +211,7 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"InvoiceFlow UI: {url}", flush=True)
+    print(runtime_message(), flush=True)
     if not args.no_browser:
         webbrowser.open(url)
     try:

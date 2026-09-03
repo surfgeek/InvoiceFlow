@@ -46,7 +46,7 @@ class UiTests(unittest.TestCase):
         self.assertEqual(result["mode"], "offline")
         self.assertEqual(result["completed"], 1)
         self.assertEqual(result["results"][0]["outcome"], "simulated_paid")
-        self.assertIn("No xAI API key", result["notices"][0])
+        self.assertIn("Offline mode activated", result["notices"][0])
         self.assertTrue(Path(result["report_path"]).is_file())
 
     def test_api_failure_retries_offline_and_continues(self):
@@ -86,6 +86,10 @@ class UiTests(unittest.TestCase):
         self.assertIn("document.createElement('details')", ui.HTML)
         self.assertIn("View errors and details", ui.HTML)
         self.assertNotIn("validation_issues||[]).join('; ')", ui.HTML)
+
+    def test_runtime_message_reports_missing_key_before_a_run(self):
+        with patch.object(ui, "load_dotenv"), patch.dict(os.environ, {}, clear=True):
+            self.assertIn("No xAI API key was detected", ui.runtime_message())
 
 
 if __name__ == "__main__":
