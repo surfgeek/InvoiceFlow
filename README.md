@@ -54,7 +54,28 @@ Offline mode needs no key or network access at runtime. Live mode uses paid API
 calls. The two databases keep payment histories separate; retain them between runs.
 Keys, databases, and operational logs are excluded from Git.
 
-## How to run from the command line
+## How to run
+
+### Browser UI
+
+```bash
+python ui.py
+```
+
+The app opens at `http://127.0.0.1:8000` and defaults to the bundled
+`data/invoices` directory. Select another local directory with **Browse** or enter
+its path, then choose **Process**. Each invoice appears as it completes. When the
+batch finishes, **Open completed report** shows the full evidence and audit history.
+
+The UI starts in live Grok mode. If the API key is missing, it explains the issue
+and continues with offline fixtures. If a Grok request fails, affected invoices are
+retried offline and the remaining batch continues offline. Offline recovery can
+process unchanged bundled invoices; new or edited documents show a clear error
+because the offline mode is a fixed demonstration rather than a local LLM.
+
+Stop the local UI with **Ctrl+C** in the terminal.
+
+### Command line
 
 **Start here: process the provided invoices and create a readable report.**
 
@@ -90,9 +111,9 @@ Offline mode recognizes unchanged bundled invoice text, including renamed copies
 with supported formats. It does **not** perform LLM reasoning or parse new documents.
 Use live mode for new or edited inputs. Results explicitly identify the mode.
 
-If a Grok API request fails, the affected invoice stops with an error and suggests
-`--offline` for a local demo of bundled invoices. The app never switches modes
-automatically. Retry live processing when API access is restored.
+The CLI keeps mode selection explicit. If a Grok API request fails, the affected
+invoice stops with an error and suggests `--offline` for a local demo of bundled
+invoices. It does not switch modes automatically.
 
 Folder processing is concurrent and nonrecursive. Handled per-invoice failures
 do not stop the batch. Keep JSON and HTML output outside the input folder.
